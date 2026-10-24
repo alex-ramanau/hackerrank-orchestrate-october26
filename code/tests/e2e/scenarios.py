@@ -353,11 +353,33 @@ def unknown_email_gets_no_timing_link():
     return ds, {"case_19": ("COMPLETE", [])}
 
 
+def earlier_request_owns_its_leftovers():
+    """A record last seen during the same person's earlier request is reported by that request; the later
+    request (made after the earlier audit) only answers for what was observed in its own lifecycle."""
+    ds = base()
+    ds.readback_log("2026-03-10T10:00:00Z", [profile_lookup("account_7040", EMAIL, ts="2026-03-10T08:00:00Z"),
+                                             search_lookup("search_7041", EMAIL, ts="2026-03-10T08:05:00Z")])
+    ds.request("case_20", EMAIL, "2026-03-01T09:00:00Z", "2026-03-03T09:00:00Z", "2026-03-10T12:00:00Z")
+    profile_deletion(ds, "account_7040", "2026-03-03T08:00:00Z")
+    profile_deletion(ds, "account_7001", "2026-05-03T08:00:00Z")
+    ds.readback_log("2026-05-10T10:00:00Z", [profile_lookup("account_7001", EMAIL)])
+    ds.request("case_21", EMAIL, REQ, REP, AUD)
+    return ds, {
+        "case_20": ("INCOMPLETE", [
+            F("search_service", "search_7041", "REPORT_REMAINING_RECORD", "evidence_01"),
+            R("search_service", "search_7041", "DELETE_RECORD"),
+            V("account_service", "account_7040", "VERIFY_RECORD_ABSENT"),
+            V("search_service", "search_7041", "VERIFY_RECORD_ABSENT"),
+        ]),
+        "case_21": ("COMPLETE", [V("account_service", "account_7001", "VERIFY_RECORD_ABSENT", "evidence_02")]),
+    }
+
+
 SCENARIOS = [
     historical_email_only, near_miss_decoys, evidence_after_audit_is_ignored, korean_non_deletion_request,
     success_claim_is_not_proof, failover_replica_drift, connector_recreates_deleted_entry, restorable_backup,
     tombstones_exposed_and_clean, support_message_vs_attachment, retained_audit_and_legal_hold,
     analytics_profile_vs_marketing_contact, complete_cites_latest_evidence, identifiers_joined_across_trace_lines,
     unknown_identity_uses_bare_email, retained_record_from_late_export, late_export_never_supports_complete,
-    unknown_email_gets_no_timing_link,
+    unknown_email_gets_no_timing_link, earlier_request_owns_its_leftovers,
 ]
