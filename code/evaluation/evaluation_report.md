@@ -74,7 +74,7 @@ Evaluation texts: 375 unique, 375 labelled by the LLM; LLM/heuristic agreement *
 
 ## 3. Custom end-to-end evaluation cases
 
-18/18 hand-labelled scenarios pass. Each writes a miniature dataset in the real file formats, runs `main.py` as a subprocess and compares every output step (code: `code/tests/e2e/`).
+19/19 hand-labelled scenarios pass. Each writes a miniature dataset in the real file formats, runs `main.py` as a subprocess and compares every output step (code: `code/tests/e2e/`).
 
 | # | Scenario | Expected | Result |
 |---|---|---|---|
@@ -96,6 +96,7 @@ Evaluation texts: 375 unique, 375 labelled by the LLM; LLM/heuristic agreement *
 | 16 | `retained_record_from_late_export` | case_17: INCOMPLETE | pass |
 | 17 | `late_export_never_supports_complete` | case_18: COMPLETE | pass |
 | 18 | `unknown_email_gets_no_timing_link` | case_19: COMPLETE | pass |
+| 19 | `earlier_request_owns_its_leftovers` | case_20: INCOMPLETE, case_21: COMPLETE | pass |
 
 ## 4. Invariants on the 518-case run (no labels needed)
 
@@ -130,6 +131,7 @@ Sample numbers are on all 32 public cases (status accuracy / exact sequence accu
 | 12 | External review (probe) | A request with an unknown email and copied timestamps was answered COMPLETE, citing an account attached only by workflow timing. | A subject that resolves to no identity gets no timing-only workflow link, so no verdict can rest on timing alone. | e2e `unknown_email_gets_no_timing_link`; 0 eval rows change |
 | 13 | External review (robustness) | Unreadable visual evidence (no cache or no vision backend) silently counted as "no records", which turns INCOMPLETE into COMPLETE. A requests CSV saved with a UTF-8 BOM crashed with `KeyError: 'case_id'`, and a wrong `--dataset-dir` printed a traceback. | Unreadable files are tracked; every COMPLETE verdict that could depend on one is marked `unverified_evidence` in its trace and counted on stderr, and `GDA_STRICT_EVIDENCE=1` turns this into exit code 4. CSVs are read as `utf-8-sig` with trimmed headers. Missing inputs give a one-line error and exit 1. | unit tests `test_byte_order_mark_and_padded_header`, `test_unreadable_visual_evidence_is_tracked` |
 | 14 | External review (metrics) | The field-level table was degenerate: steps were aligned on `(phase, system_id, resource_id)`, so those fields matched by construction. | Steps are paired by best field agreement (exact first). | non-degenerate field table |
+| 15 | External review (design) | The 90-day staleness cut-off of #8 was a tuned constant that could hide a real leftover. | Replaced by a rule with no constant: a record not observed since the audit of the same person's *earlier* deletion request belongs to that request's lifecycle (and is reported there). It matches both sample precedents (case_61 → case_07, case_46 → case_17). | samples unchanged; 1 eval row changes (case_33: the June export is reported by case_52, the earlier request) |
 
 ## 6. Known limitations
 

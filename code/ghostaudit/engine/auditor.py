@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from ..evidence.records import system_for
 from ..evidence.store import ObservationStore
@@ -19,9 +19,6 @@ log = logging.getLogger(__name__)
 
 # Systems whose records only need an existence check when inferring absence from a full snapshot.
 IMPLICIT_ABSENCE_TREATMENTS = {"DELETE"}
-# A record last seen this long before the request belongs to an earlier lifecycle (e.g. an earlier request of
-# the same person); it cannot establish anything about this request.
-STALE_BEFORE_REQUEST = timedelta(days=90)
 
 
 @dataclass
@@ -38,13 +35,22 @@ class AuditContext:
     def prepare(self, cases: list[Case]) -> None:
         """Resolve subjects and assign deletion workflows across every known request at once."""
         items = []
+        self._requests_by_user: dict[str, list[Case]] = {}
         for c in cases:
             s = self.resolver.resolve(c.email, c.requested_at) or self.resolver.bare_subject(c.email)
             self.subjects[c.case_id] = s
             self.direct[c.case_id] = self.linker.direct_resources(s, c.audit_at)
             items.append((c, s, self.direct[c.case_id]))
+            if s.user_id:
+                self._requests_by_user.setdefault(s.user_id, []).append(c)
         self._items = items
         self._by_cutoff: dict = {}
+
+    def earlier_audit(self, case: Case, subject: Subject) -> datetime | None:
+        """audit_at of the subject's latest earlier deletion request that was audited before this one was made."""
+        prev = [p.audit_at for p in getattr(self, "_requests_by_user", {}).get(subject.user_id or "", [])
+                if p.case_id != case.case_id and p.audit_at <= case.requested_at]
+        return max(prev) if prev else None
 
     def workflow_for(self, case: Case) -> Activity | None:
         """The deletion workflow of `case`, from an assignment computed with information up to its audit_at."""
@@ -101,6 +107,9 @@ def audit_case(case: Case, ctx: AuditContext) -> CaseResult:
             owned.setdefault(st.resource_id, "workflow")
     trace["workflow"] = workflow.activity_id if workflow else None
 
+    # A record not observed since the audit of the same person's earlier deletion request belongs to that
+    # request's lifecycle: nothing about it was seen during this one.
+    earlier = ctx.earlier_audit(case, subject)
     plans: list[ResourcePlan] = []
     for rid in sorted(owned):
         system_id = system_for(rid)
@@ -121,7 +130,8 @@ def audit_case(case: Case, ctx: AuditContext) -> CaseResult:
                 state = ResourceState(Kind.ABSENT, workflow.activity_id if workflow and rid == account_id else "")
         if state.kind is None:
             continue
-        if system_id != "account_service" and _last_seen(observations, case.audit_at) < case.requested_at - STALE_BEFORE_REQUEST:
+        if system_id != "account_service" and earlier is not None and _last_seen(observations, case.audit_at) <= earlier:
+            trace.setdefault("earlier_lifecycle", []).append(rid)
             continue
         state.category = category
         plans.append(ResourcePlan(system_id, rid, decision, state, owned[rid]))
