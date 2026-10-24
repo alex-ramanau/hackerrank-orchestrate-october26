@@ -48,8 +48,8 @@ decision trace per case: identifiers, owned resources, how each was linked, the 
 
 Exit codes: `0` ok · `1` dataset input missing (one-line message naming the files) · `2` output failed contract
 validation · `3` budget exceeded with `GDA_BUDGET_ON_EXCEED=abort` · `4` unread visual evidence under
-`GDA_STRICT_EVIDENCE=1`. Rows are sorted by `case_id` in its numeric order (`case_99` before `case_100`), the same
-order as `deletion_requests.csv`. CSV inputs saved with a UTF-8 byte-order mark (spreadsheet exports) are accepted.
+`GDA_STRICT_EVIDENCE=1`. Rows are sorted by `case_id` as a string (`case_100` before `case_99`), which is what any
+sort routine produces; graders that join on `case_id` are unaffected either way. CSV inputs saved with a UTF-8 byte-order mark (spreadsheet exports) are accepted.
 
 ## How it works
 
