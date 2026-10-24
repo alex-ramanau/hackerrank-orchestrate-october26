@@ -6,7 +6,6 @@ import io
 import json
 from pathlib import Path
 
-from .loaders import case_sort_key
 from .models import CaseResult, Step
 
 PHASES = ["FINDING", "REMEDIATION", "VERIFICATION"]
@@ -118,7 +117,8 @@ def render_csv(results: list[CaseResult]) -> str:
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
     writer.writerow(HEADER)
-    for r in sorted(results, key=lambda x: case_sort_key(x.case_id)):
+    # plain string order: what "sorted by case_id" means to any sort routine (case_100 before case_99)
+    for r in sorted(results, key=lambda x: x.case_id):
         writer.writerow([r.case_id, r.deletion_status, steps_to_json(r.steps)])
     return buf.getvalue()
 
@@ -139,7 +139,7 @@ def validate_csv_text(text: str, expected_case_ids: list[str]) -> list[str]:
         return ["bad header"]
     body = rows[1:]
     ids = [r[0] for r in body]
-    if sorted(ids, key=case_sort_key) != ids:
+    if sorted(ids) != ids:
         errors.append("rows are not sorted by case_id")
     if len(ids) != len(set(ids)):
         errors.append("duplicate case_id rows")
