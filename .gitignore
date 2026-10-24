@@ -8,3 +8,4 @@ code/cache/ledger/
 code.zip
 .pytest_cache/
 code/evaluation/edge_dataset/.runs/
+tmp
