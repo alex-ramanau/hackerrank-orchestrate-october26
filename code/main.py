@@ -71,8 +71,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"warning: {len(unread)} visual evidence file(s) could not be read ({', '.join(f for f, _ in unread)}); "
               f"{len(at_risk)} COMPLETE verdict(s) are unverified against them (see 'unverified_evidence' in traces)",
               file=sys.stderr)
-        if at_risk and os.environ.get("GDA_STRICT_EVIDENCE") == "1":
-            print("error: GDA_STRICT_EVIDENCE=1 and some COMPLETE verdicts rest on unread evidence", file=sys.stderr)
+        if at_risk and os.environ.get("GDA_STRICT_EVIDENCE", "1") != "0":
+            # fail loudly rather than towards COMPLETE: every row is written, but the run is not a clean pass
+            print("error: some COMPLETE verdicts rest on evidence that could not be read; restore the LLM cache or "
+                  "a vision backend, or set GDA_STRICT_EVIDENCE=0 to accept them", file=sys.stderr)
             return 4
     if res.errors:
         print(f"{len(res.errors)} output validation error(s):", file=sys.stderr)

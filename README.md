@@ -5,7 +5,7 @@ whether deletion was authorized, reconstructs the subject's identifiers, finds e
 `audit_at`, applies `deletion_rules.csv`, and writes `COMPLETE` / `INCOMPLETE` / `NOT_APPLICABLE` with an ordered
 FINDING → REMEDIATION → VERIFICATION plan to `output.csv`.
 
-Challenge contract: [`problem_statement.md`](./problem_statement.md) · Design spec: [`code/docs/SPEC.md`](./code/docs/SPEC.md) ·
+Challenge contract: `problem_statement.md` (organizer file in the challenge repository, not shipped in `code.zip`) · Design spec: [`code/docs/SPEC.md`](./code/docs/SPEC.md) ·
 Results: [`code/evaluation/evaluation_report.md`](./code/evaluation/evaluation_report.md),
 [`code/evaluation/usage_report.md`](./code/evaluation/usage_report.md)
 
@@ -18,7 +18,7 @@ python3 code/main.py                    # 518 requests -> ./output.csv   (~12 s)
 python3 code/main.py --cases sample     # 32 public samples -> ./sample_predictions.csv
 python3 code/evaluation/main.py         # metrics + regenerate both reports (~1.5 min)
 python3 code/evaluation/check_all.py    # quality gate: tests, sample regression, invariants (~40 s)
-python3 -m unittest discover -s code/tests -t code   # 26 unit + 19 end-to-end scenario tests
+python3 -m unittest discover -s code/tests -t code   # 26 unit + 20 end-to-end scenario tests
 python3 code/package.py                 # build code.zip (README.md + code/ + evaluation/ report copies, no dataset)
 ```
 
@@ -38,8 +38,9 @@ so a clean clone reproduces `output.csv` byte-for-byte with no network access an
 
 Other settings: `GDA_MODEL_FAST` (default `claude-haiku-5-5`, intent), `GDA_MODEL_VISION` (default `claude-sonnet-5-5`,
 PNG/PDF evidence), `GDA_BUDGET_USD` (default `3.00`, `0` = cache only), `GDA_BUDGET_SCOPE` (`total` | `run`),
-`GDA_BUDGET_ON_EXCEED` (`fallback` | `abort`, exit code 3), `GDA_STRICT_EVIDENCE=1` (exit code 4 when a screenshot/PDF
-could not be read and a COMPLETE verdict could depend on it). Secrets are read from the environment only; keep them
+`GDA_BUDGET_ON_EXCEED` (`fallback` | `abort`, exit code 3), `GDA_STRICT_EVIDENCE` (default `1`: exit code 4, after writing every row, when a
+screenshot/PDF captured during a request could not be read and that request's COMPLETE verdict could depend on it;
+`0` accepts such verdicts). Secrets are read from the environment only; keep them
 in an uncommitted `.env` and `export` them. Example: `GDA_LLM_BACKEND=claude_cli python3 code/main.py`.
 
 CLI options of `code/main.py`: `--dataset-dir DIR`, `--requests FILE`, `--out PATH`, `--trace-dir DIR` (one JSON
@@ -47,8 +48,8 @@ decision trace per case: identifiers, owned resources, how each was linked, the 
 `--backend NAME`, `--workflow-model PATH`, `--relearn-workflow-model`, `-v`.
 
 Exit codes: `0` ok · `1` dataset input missing (one-line message naming the files) · `2` output failed contract
-validation · `3` budget exceeded with `GDA_BUDGET_ON_EXCEED=abort` · `4` unread visual evidence under
-`GDA_STRICT_EVIDENCE=1`. Rows are sorted by `case_id` as a string (`case_100` before `case_99`), which is what any
+validation · `3` budget exceeded with `GDA_BUDGET_ON_EXCEED=abort` · `4` a COMPLETE verdict rests on unread
+visual evidence (default; `GDA_STRICT_EVIDENCE=0` to accept). Rows are sorted by `case_id` as a string (`case_100` before `case_99`), which is what any
 sort routine produces; graders that join on `case_id` are unaffected either way. CSV inputs saved with a UTF-8 byte-order mark (spreadsheet exports) are accepted.
 
 ## How it works
@@ -83,7 +84,8 @@ dataset/ ─► loaders ─► IdentityResolver (current + historical email/phon
   profile deletion to exactly one request by elimination — only with information available at the case's `audit_at`.
   Timing is never enough on its own: a request whose email resolves to no known person gets no workflow link.
 - **Unread evidence is never silent.** If a screenshot/PDF cannot be transcribed (empty cache, no vision backend),
-  every COMPLETE verdict that could depend on it is marked `unverified_evidence` in its trace and counted on stderr.
+  every COMPLETE verdict of a request during which it was captured is marked `unverified_evidence` in its trace,
+  counted on stderr, and the run exits 4 (opt out with `GDA_STRICT_EVIDENCE=0`).
 - **No time travel.** Every observation, activity and cross-case elimination is cut at `audit_at`; the invariant
   suite re-runs cases with later evidence physically deleted and requires identical rows. One narrow exception: a
   retained record (e.g. a security audit event) that appears only in a file *exported* after the audit, inside a
@@ -97,7 +99,7 @@ dataset/ ─► loaders ─► IdentityResolver (current + historical email/phon
 | Sample status accuracy (dev / holdout) | 100% / 100% |
 | Sample step F1 · exact sequence | 97.4% · 84.4% (holdout 100%); the rest are 2 audit records absent from every file and 3 hand-written accounts |
 | Intent: own 62-text multilingual set + 32 samples (LLM) | 100% accuracy, NON_DELETE recall 100% |
-| Custom end-to-end scenarios | 19 / 19 |
+| Custom end-to-end scenarios | 20 / 20 |
 | Invariants on the 518-case run | contract, citations ≤ audit_at, policy sanity, determinism, identifier invariance, time travel: all pass |
 | LLM cost to build the cache used by the final run | ≈ $1.37 (34 calls via `claude -p`; ≈ $0.20 estimated via the direct API), $0 marginal for replay runs |
 

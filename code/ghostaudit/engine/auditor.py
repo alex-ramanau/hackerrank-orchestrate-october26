@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from ..evidence.records import system_for
 from ..evidence.store import ObservationStore
@@ -19,6 +19,11 @@ log = logging.getLogger(__name__)
 
 # Systems whose records only need an existence check when inferring absence from a full snapshot.
 IMPLICIT_ABSENCE_TREATMENTS = {"DELETE"}
+
+
+# Safety margin for the earlier-lifecycle rule: a leftover seen recently is always reported (a missed leftover is a
+# false COMPLETE, the costliest error), even if it was last seen during an earlier request of the same person.
+EARLIER_LIFECYCLE_MIN_AGE = timedelta(days=90)
 
 
 @dataclass
@@ -107,8 +112,8 @@ def audit_case(case: Case, ctx: AuditContext) -> CaseResult:
             owned.setdefault(st.resource_id, "workflow")
     trace["workflow"] = workflow.activity_id if workflow else None
 
-    # A record not observed since the audit of the same person's earlier deletion request belongs to that
-    # request's lifecycle: nothing about it was seen during this one.
+    # A record not observed since the audit of the same person's earlier deletion request, and not for months,
+    # belongs to that request's lifecycle: nothing about it was seen during this one.
     earlier = ctx.earlier_audit(case, subject)
     plans: list[ResourcePlan] = []
     for rid in sorted(owned):
@@ -130,7 +135,9 @@ def audit_case(case: Case, ctx: AuditContext) -> CaseResult:
                 state = ResourceState(Kind.ABSENT, workflow.activity_id if workflow and rid == account_id else "")
         if state.kind is None:
             continue
-        if system_id != "account_service" and earlier is not None and _last_seen(observations, case.audit_at) <= earlier:
+        last = _last_seen(observations, case.audit_at)
+        if system_id != "account_service" and earlier is not None and last <= earlier \
+                and last < case.requested_at - EARLIER_LIFECYCLE_MIN_AGE:
             trace.setdefault("earlier_lifecycle", []).append(rid)
             continue
         state.category = category
@@ -165,10 +172,11 @@ def audit_case(case: Case, ctx: AuditContext) -> CaseResult:
 
 
 def _flag_unverified(case: Case, ctx: AuditContext, trace: dict) -> None:
-    """A COMPLETE verdict is only as good as the evidence that was read: evidence captured before the audit
-    whose contents are unknown (an unreadable screenshot/PDF) could hold a leftover copy. The verdict is kept
-    (there is no finding to report) but marked, counted in the run summary, and fatal under GDA_STRICT_EVIDENCE=1."""
-    unread = sorted(fid for fid, at in ctx.store.unreadable if at <= case.audit_at)
+    """A COMPLETE verdict is only as good as the evidence that was read: evidence captured during the request
+    (requested_at..audit_at) whose contents are unknown (an unreadable screenshot/PDF) could hold a leftover copy.
+    The verdict is kept (there is no finding to report) but marked, counted in the run summary, and makes the run
+    exit 4 unless GDA_STRICT_EVIDENCE=0."""
+    unread = sorted(fid for fid, at in ctx.store.unreadable if case.requested_at <= at <= case.audit_at)
     if unread:
         trace["unverified_evidence"] = unread
 

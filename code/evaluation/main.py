@@ -210,7 +210,9 @@ def render_report(sample: dict, intent: dict, scenarios: list[dict], inv: dict |
     notes = (EVAL_DIR / "report_notes.md").read_text(encoding="utf-8")
     g: list[str] = ["## 1. Sample regression (public labelled cases)", "",
                     "Pipeline run on `sample_deletion_requests.csv` and scored against `sample_output.csv`. "
-                    "Dev = case_01–22 (used while building), holdout = case_23–32 (looked at only at milestones).", ""]
+                    "Dev = case_01–22 (used while building), holdout = case_23–32 (looked at only at milestones). Caveat: the "
+                    "late-export fix (§5 #11) was found on all 32 samples and 4 of its 5 hits are holdout cases, so the "
+                    "holdout is no longer an unbiased estimate; expect hidden-set exact sequence below it.", ""]
     g += metrics_table(sample)
     g += ["", "Per-operation alignment (gold operation -> predicted operation at the same resource/phase):", "",
           "| gold -> predicted | count |", "|---|---|"]
@@ -307,6 +309,8 @@ def render_usage(u: dict) -> str:
               "- Everything else (parsing, linking, state reconstruction, policy, planning) is deterministic code: 0 tokens.",
               "- Re-running with an empty cache costs about the measured total above through `claude -p`, or about the "
               "direct-API estimate through `GDA_LLM_BACKEND=anthropic`; `GDA_BUDGET_USD` caps either (default $3.00).",
+              "- The committed cache also keeps 3 `qwen2.5vl:7b` entries: the only transcriptions of the synthetic "
+              "edge-dataset screenshots (`code/evaluation/edge_cases.py run` replays them). The final run never reads them.",
               "- Development runs are separate from these final-run figures: the ledgers record every development "
               "call, including prompt iterations whose cache entries were later pruned.", ""]
     return "\n".join(lines)

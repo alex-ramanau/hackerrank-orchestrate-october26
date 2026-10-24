@@ -35,4 +35,5 @@ Notes:
 - Input token counts include prompt-cache reads/writes reported by the CLI (the CLI adds its own system prompt), which is why visual calls show large input counts at a small cost.
 - Everything else (parsing, linking, state reconstruction, policy, planning) is deterministic code: 0 tokens.
 - Re-running with an empty cache costs about the measured total above through `claude -p`, or about the direct-API estimate through `GDA_LLM_BACKEND=anthropic`; `GDA_BUDGET_USD` caps either (default $3.00).
+- The committed cache also keeps 3 `qwen2.5vl:7b` entries: the only transcriptions of the synthetic edge-dataset screenshots (`code/evaluation/edge_cases.py run` replays them). The final run never reads them.
 - Development runs are separate from these final-run figures: the ledgers record every development call, including prompt iterations whose cache entries were later pruned.
