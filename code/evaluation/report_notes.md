@@ -28,6 +28,11 @@ Sample numbers are on all 32 public cases (status accuracy / exact sequence accu
   that appear in no participant file at all, so they cannot be derived.
 - Five hand-written sample cases (case_02/04/07/08/10) have accounts whose deletion activity sits outside the reported
   window or has no activity at all; the generic workflow linker sometimes picks a neighbouring account for them.
+- Accuracy of timing (workflow) links on the samples: **18/18** on the generated cases case_11–32 and 6/10 on the
+  hand-written cases case_01–10 (all 4 wrong links are case_04/08/10). Identifier links are 76/76 and late-export
+  links 5/5. The hand-written deletions use a different activity wording ("reported the requested operation as
+  completed") and are logged within ±10 min of `reported_at`. All 6 such events are sample cases; none appears among
+  the 518 evaluation requests.
 - When several requests share one reporting window and no identifier links any of their accounts, the assignment of
   deletion workflows to requests is resolved by elimination and can swap two accounts. Status is unaffected; only the
   account `resource_id` of a verification step changes.
