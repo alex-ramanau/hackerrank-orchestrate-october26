@@ -354,13 +354,13 @@ def unknown_email_gets_no_timing_link():
 
 
 def earlier_request_owns_its_leftovers():
-    """A record last seen during the same person's earlier request is reported by that request; the later
-    request (made after the earlier audit) only answers for what was observed in its own lifecycle."""
+    """A record last seen months ago, during the same person's earlier request, is reported by that request; the
+    later request (made after the earlier audit) only answers for what was observed in its own lifecycle."""
     ds = base()
-    ds.readback_log("2026-03-10T10:00:00Z", [profile_lookup("account_7040", EMAIL, ts="2026-03-10T08:00:00Z"),
-                                             search_lookup("search_7041", EMAIL, ts="2026-03-10T08:05:00Z")])
-    ds.request("case_20", EMAIL, "2026-03-01T09:00:00Z", "2026-03-03T09:00:00Z", "2026-03-10T12:00:00Z")
-    profile_deletion(ds, "account_7040", "2026-03-03T08:00:00Z")
+    ds.readback_log("2026-01-10T10:00:00Z", [profile_lookup("account_7040", EMAIL, ts="2026-01-10T08:00:00Z"),
+                                             search_lookup("search_7041", EMAIL, ts="2026-01-10T08:05:00Z")])
+    ds.request("case_20", EMAIL, "2026-01-01T09:00:00Z", "2026-01-03T09:00:00Z", "2026-01-10T12:00:00Z")
+    profile_deletion(ds, "account_7040", "2026-01-03T08:00:00Z")
     profile_deletion(ds, "account_7001", "2026-05-03T08:00:00Z")
     ds.readback_log("2026-05-10T10:00:00Z", [profile_lookup("account_7001", EMAIL)])
     ds.request("case_21", EMAIL, REQ, REP, AUD)
@@ -375,6 +375,25 @@ def earlier_request_owns_its_leftovers():
     }
 
 
+def recent_leftover_of_earlier_request_is_reported():
+    """Safety margin: a leftover seen a few weeks ago during the earlier request is still reported by the later
+    one; only months-old records are left to the earlier lifecycle (a missed leftover is a false COMPLETE)."""
+    ds = base()
+    ds.readback_log("2026-04-10T10:00:00Z", [profile_lookup("account_7040", EMAIL, ts="2026-04-10T08:00:00Z"),
+                                             search_lookup("search_7041", EMAIL, ts="2026-04-10T08:05:00Z")])
+    ds.request("case_22", EMAIL, "2026-04-01T09:00:00Z", "2026-04-03T09:00:00Z", "2026-04-10T12:00:00Z")
+    profile_deletion(ds, "account_7040", "2026-04-03T08:00:00Z")
+    profile_deletion(ds, "account_7001", "2026-05-03T08:00:00Z")
+    ds.readback_log("2026-05-10T10:00:00Z", [profile_lookup("account_7001", EMAIL)])
+    ds.request("case_23", EMAIL, REQ, REP, AUD)
+    return ds, {"case_23": ("INCOMPLETE", [
+        F("search_service", "search_7041", "REPORT_REMAINING_RECORD", "evidence_01"),
+        R("search_service", "search_7041", "DELETE_RECORD"),
+        V("account_service", "account_7001", "VERIFY_RECORD_ABSENT"),
+        V("search_service", "search_7041", "VERIFY_RECORD_ABSENT"),
+    ])}
+
+
 SCENARIOS = [
     historical_email_only, near_miss_decoys, evidence_after_audit_is_ignored, korean_non_deletion_request,
     success_claim_is_not_proof, failover_replica_drift, connector_recreates_deleted_entry, restorable_backup,
@@ -382,4 +401,5 @@ SCENARIOS = [
     analytics_profile_vs_marketing_contact, complete_cites_latest_evidence, identifiers_joined_across_trace_lines,
     unknown_identity_uses_bare_email, retained_record_from_late_export, late_export_never_supports_complete,
     unknown_email_gets_no_timing_link, earlier_request_owns_its_leftovers,
+    recent_leftover_of_earlier_request_is_reported,
 ]
