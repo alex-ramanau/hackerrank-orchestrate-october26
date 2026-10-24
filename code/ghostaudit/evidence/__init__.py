@@ -45,6 +45,10 @@ def build_observation_store(manifest: list[EvidenceFile], activities: list[Activ
             records, cov = EXTRACTORS[suffix](ef)
         elif suffix in multimodal.VISUAL_SUFFIXES:
             records, cov = multimodal.extract(ef, llm)
+            if records is None:
+                store.unreadable.append((ef.file_id, ef.captured_at))
+                store.report[ef.file_id] = {"path": str(ef.path.name), "error": "visual extraction unavailable"}
+                continue
         else:
             store.report[ef.file_id] = {"path": str(ef.path), "error": f"unsupported {suffix}"}
             continue

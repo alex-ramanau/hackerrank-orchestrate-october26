@@ -116,8 +116,23 @@ def _filtered_dataset(src: Path, dst: Path, cutoff, keep_cases: list[str], reque
     return group
 
 
+def _without_late_retained(full: tuple[str, str] | None, got: tuple[str, str] | None) -> bool:
+    """True when `got` equals `full` except for uncited VERIFY_RECORD_PRESENT checks that `full` adds.
+
+    A file exported after the audit can hold a snapshot taken at or before it; a retained record seen only there
+    existed at the audit and adds a post-remediation check (never a finding, citation or status change)."""
+    if full is None or got is None or full[0] != got[0]:
+        return False
+    keys = ("phase", "system_id", "resource_id", "operation", "state", "evidence_id")
+    f = [tuple(s[k] for k in keys) for s in json.loads(full[1])]
+    g = [tuple(s[k] for k in keys) for s in json.loads(got[1])]
+    extra = [s for s in f if s not in g]
+    return [s for s in f if s in g] == g and all(s[3] == "VERIFY_RECORD_PRESENT" and not s[5] for s in extra)
+
+
 def time_travel(output: Path, dataset: Path, requests: Path, max_groups: int | None = 6) -> tuple[list[str], int]:
-    """Re-run groups of cases with all later evidence removed; their rows must not change."""
+    """Re-run groups of cases with all later evidence removed; their rows must not change (except for the
+    uncited retained-record checks described in _without_late_retained)."""
     full = read_rows(output)
     groups = defaultdict(list)
     for c in loaders.load_cases(requests):
@@ -136,7 +151,7 @@ def time_travel(output: Path, dataset: Path, requests: Path, max_groups: int | N
             got = read_rows(out) if out.exists() else {}
             for cid in groups[cutoff]:
                 checked += 1
-                if got.get(cid) != full.get(cid):
+                if got.get(cid) != full.get(cid) and not _without_late_retained(full.get(cid), got.get(cid)):
                     errors.append(f"{cid}: row changes when evidence after {cutoff.isoformat()} is removed")
     return errors, checked
 

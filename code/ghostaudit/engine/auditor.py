@@ -129,7 +129,22 @@ def audit_case(case: Case, ctx: AuditContext) -> CaseResult:
     if not plans:
         return _no_resource(case, ctx, subject, direct, trace)
 
+    if any(not p.compliant for p in plans):
+        planned = {p.resource_id for p in plans}
+        for rid, obs in sorted(ctx.linker.late_retained(subject, case.audit_at).items()):
+            if rid in planned or any(o.captured_at <= case.audit_at for o in ctx.store.by_resource(rid)):
+                continue
+            system_id = system_for(rid)
+            category = next((o.category for o in obs if o.category), None)
+            decision = ctx.policy.decide(system_id, category, {}, case.audit_at)
+            if decision.treatment != "RETAIN":
+                continue
+            plans.append(ResourcePlan(system_id, rid, decision, ResourceState(Kind.RETAINED, "", category=category),
+                                      "late_export"))
+
     status, steps = build_steps(plans)
+    if status == "COMPLETE":
+        _flag_unverified(case, ctx, trace)
     trace["resources"] = [
         {"system_id": p.system_id, "resource_id": p.resource_id, "link": p.link, "category": p.decision.category,
          "treatment": p.decision.treatment, "rule_id": p.decision.rule_id, "state": p.state.kind.value,
@@ -137,6 +152,15 @@ def audit_case(case: Case, ctx: AuditContext) -> CaseResult:
         for p in plans
     ]
     return CaseResult(case.case_id, status, steps, trace)
+
+
+def _flag_unverified(case: Case, ctx: AuditContext, trace: dict) -> None:
+    """A COMPLETE verdict is only as good as the evidence that was read: evidence captured before the audit
+    whose contents are unknown (an unreadable screenshot/PDF) could hold a leftover copy. The verdict is kept
+    (there is no finding to report) but marked, counted in the run summary, and fatal under GDA_STRICT_EVIDENCE=1."""
+    unread = sorted(fid for fid, at in ctx.store.unreadable if at <= case.audit_at)
+    if unread:
+        trace["unverified_evidence"] = unread
 
 
 def _no_resource(case: Case, ctx: AuditContext, subject: Subject, direct: dict, trace: dict) -> CaseResult:
@@ -151,7 +175,9 @@ def _no_resource(case: Case, ctx: AuditContext, subject: Subject, direct: dict, 
         acc = cands[0][1]
         trace["note"] = f"no observable resource; fell back to workflow {acc.activity_id}"
         steps = [Step("VERIFICATION", "account_service", acc.resource_id, "VERIFY_RECORD_ABSENT", "ABSENT", acc.activity_id)]
+        _flag_unverified(case, ctx, trace)
         return CaseResult(case.case_id, "COMPLETE", steps, trace)
     trace["note"] = "no observable resource and no deletion workflow for the subject"
     log.warning("%s: authorized deletion with no observable footprint; COMPLETE without steps", case.case_id)
+    _flag_unverified(case, ctx, trace)
     return CaseResult(case.case_id, "COMPLETE", [], trace)

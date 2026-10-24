@@ -1,6 +1,6 @@
 {
   "status_accuracy": 1.0,
-  "step_f1": 0.954,
-  "sequence_accuracy": 0.7273,
+  "step_f1": 0.9583,
+  "sequence_accuracy": 0.7727,
   "citation_accuracy": 0.9474
 }

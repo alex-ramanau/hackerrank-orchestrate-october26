@@ -18,8 +18,8 @@ python3 code/main.py                    # 518 requests -> ./output.csv   (~12 s)
 python3 code/main.py --cases sample     # 32 public samples -> ./sample_predictions.csv
 python3 code/evaluation/main.py         # metrics + regenerate both reports (~1.5 min)
 python3 code/evaluation/check_all.py    # quality gate: tests, sample regression, invariants (~40 s)
-python3 -m unittest discover -s code/tests -t code   # 22 unit + 15 end-to-end scenario tests
-python3 code/package.py                 # build code.zip (README.md + code/, no dataset)
+python3 -m unittest discover -s code/tests -t code   # 26 unit + 18 end-to-end scenario tests
+python3 code/package.py                 # build code.zip (README.md + code/ + evaluation/ report copies, no dataset)
 ```
 
 The default backend is `replay`: every LLM result the pipeline needs is committed in `code/cache/llm_cache.jsonl`,
@@ -38,12 +38,18 @@ so a clean clone reproduces `output.csv` byte-for-byte with no network access an
 
 Other settings: `GDA_MODEL_FAST` (default `claude-haiku-5-5`, intent), `GDA_MODEL_VISION` (default `claude-sonnet-5-5`,
 PNG/PDF evidence), `GDA_BUDGET_USD` (default `3.00`, `0` = cache only), `GDA_BUDGET_SCOPE` (`total` | `run`),
-`GDA_BUDGET_ON_EXCEED` (`fallback` | `abort`, exit code 3). Secrets are read from the environment only; keep them
+`GDA_BUDGET_ON_EXCEED` (`fallback` | `abort`, exit code 3), `GDA_STRICT_EVIDENCE=1` (exit code 4 when a screenshot/PDF
+could not be read and a COMPLETE verdict could depend on it). Secrets are read from the environment only; keep them
 in an uncommitted `.env` and `export` them. Example: `GDA_LLM_BACKEND=claude_cli python3 code/main.py`.
 
 CLI options of `code/main.py`: `--dataset-dir DIR`, `--requests FILE`, `--out PATH`, `--trace-dir DIR` (one JSON
 decision trace per case: identifiers, owned resources, how each was linked, the observations and the rule applied),
 `--backend NAME`, `--workflow-model PATH`, `--relearn-workflow-model`, `-v`.
+
+Exit codes: `0` ok · `1` dataset input missing (one-line message naming the files) · `2` output failed contract
+validation · `3` budget exceeded with `GDA_BUDGET_ON_EXCEED=abort` · `4` unread visual evidence under
+`GDA_STRICT_EVIDENCE=1`. Rows are sorted by `case_id` in its numeric order (`case_99` before `case_100`), the same
+order as `deletion_requests.csv`. CSV inputs saved with a UTF-8 byte-order mark (spreadsheet exports) are accepted.
 
 ## How it works
 
@@ -75,19 +81,25 @@ dataset/ ─► loaders ─► IdentityResolver (current + historical email/phon
   fixed sub-minute cadence after the profile deletion; that cadence is learned from workflows whose resources are
   identifier-linked (`code/cache/workflow_model.json`) and used to attach un-linked steps and to assign each
   profile deletion to exactly one request by elimination — only with information available at the case's `audit_at`.
+  Timing is never enough on its own: a request whose email resolves to no known person gets no workflow link.
+- **Unread evidence is never silent.** If a screenshot/PDF cannot be transcribed (empty cache, no vision backend),
+  every COMPLETE verdict that could depend on it is marked `unverified_evidence` in its trace and counted on stderr.
 - **No time travel.** Every observation, activity and cross-case elimination is cut at `audit_at`; the invariant
-  suite re-runs cases with later evidence physically deleted and requires identical rows.
+  suite re-runs cases with later evidence physically deleted and requires identical rows. One narrow exception: a
+  retained record (e.g. a security audit event) that appears only in a file *exported* after the audit, inside a
+  snapshot or on a log line *taken* at or before `audit_at`, existed at the audit. It adds an uncited post-remediation
+  `VERIFY_RECORD_PRESENT` to an INCOMPLETE case. It is never cited, never a finding, and never changes a status.
 
 ## Evaluation (details in the report)
 
 | Measure | Result |
 |---|---|
 | Sample status accuracy (dev / holdout) | 100% / 100% |
-| Sample step F1 · exact sequence | 96.0% · 68.8% (most misses are audit records absent from all pre-audit evidence) |
+| Sample step F1 · exact sequence | 97.4% · 84.4% (holdout 100%); the rest are 2 audit records absent from every file and 3 hand-written accounts |
 | Intent: own 62-text multilingual set + 32 samples (LLM) | 100% accuracy, NON_DELETE recall 100% |
-| Custom end-to-end scenarios | 15 / 15 |
+| Custom end-to-end scenarios | 18 / 18 |
 | Invariants on the 518-case run | contract, citations ≤ audit_at, policy sanity, determinism, identifier invariance, time travel: all pass |
-| LLM cost to build the cache used by the final run | ≈ $1.37 (34 calls), $0 marginal for replay runs |
+| LLM cost to build the cache used by the final run | ≈ $1.37 (34 calls via `claude -p`; ≈ $0.20 estimated via the direct API), $0 marginal for replay runs |
 
 ## Repository layout
 

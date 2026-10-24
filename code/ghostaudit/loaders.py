@@ -57,8 +57,11 @@ def email_hash(email: str) -> str:
 
 
 def _rows(path: Path) -> list[dict]:
-    with open(path, newline="", encoding="utf-8") as fh:
-        return list(csv.DictReader(fh))
+    # utf-8-sig: a CSV re-saved by a spreadsheet tool starts with a byte-order mark that would rename column 1
+    with open(path, newline="", encoding="utf-8-sig") as fh:
+        rows = list(csv.DictReader(fh))
+    # tolerate padded header names (" case_id")
+    return [{(k or "").strip(): v for k, v in r.items()} for r in rows]
 
 
 def load_cases(path: Path) -> list[Case]:

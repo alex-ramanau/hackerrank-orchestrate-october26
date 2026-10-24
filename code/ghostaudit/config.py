@@ -50,6 +50,10 @@ class DatasetPaths:
     def eval_requests(self) -> Path:
         return self.root / "deletion_requests.csv"
 
+    def required(self) -> list[Path]:
+        """Inputs every run needs (the request file is checked separately)."""
+        return [self.identities, self.audit_log, self.activity, self.rules, self.manifest]
+
 
 def env(name: str, default: str = "") -> str:
     return os.environ.get(name, default)

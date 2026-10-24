@@ -6,15 +6,15 @@ Pipeline run on `sample_deletion_requests.csv` and scored against `sample_output
 
 | Split | Cases | Status acc. | Step P | Step R | Step F1 | Sequence acc. | Citation acc. |
 |---|---|---|---|---|---|---|---|
-| all | 32 | 100.0% | 97.8% | 94.3% | 96.0% | 68.8% | 97.3% |
-| dev | 22 | 100.0% | 96.6% | 94.2% | 95.4% | 72.7% | 94.7% |
-| holdout | 10 | 100.0% | 100.0% | 94.4% | 97.1% | 60.0% | 100.0% |
+| all | 32 | 100.0% | 97.9% | 96.9% | 97.4% | 84.4% | 97.3% |
+| dev | 22 | 100.0% | 96.6% | 95.0% | 95.8% | 77.3% | 94.7% |
+| holdout | 10 | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% |
 
-Field-level accuracy (gold steps aligned on `(phase, system_id, resource_id)`):
+Field-level accuracy: each gold step is paired with a predicted step of the same case (exact matches first, then the unused step agreeing on most fields, >= 2), so every field, the resource included, is scored on its own; an unpaired gold step counts as wrong on every field.
 
 | Field | phase | system_id | resource_id | operation | state | evidence_id |
 |---|---|---|---|---|---|---|
-| all | 94.3% | 94.3% | 94.3% | 94.3% | 94.3% | 94.3% |
+| all | 98.4% | 98.4% | 96.9% | 98.4% | 98.4% | 97.9% |
 
 Per-operation alignment (gold operation -> predicted operation at the same resource/phase):
 
@@ -35,23 +35,18 @@ Per-operation alignment (gold operation -> predicted operation at the same resou
 | VERIFY_RECORD_ABSENT -> VERIFY_RECORD_ABSENT | 47 |
 | VERIFY_RECORD_ANONYMIZED -> <missing> | 1 |
 | VERIFY_RECORD_ANONYMIZED -> VERIFY_RECORD_ANONYMIZED | 11 |
-| VERIFY_RECORD_PRESENT -> <missing> | 7 |
-| VERIFY_RECORD_PRESENT -> VERIFY_RECORD_PRESENT | 17 |
+| VERIFY_RECORD_PRESENT -> <missing> | 2 |
+| VERIFY_RECORD_PRESENT -> VERIFY_RECORD_PRESENT | 22 |
 | VERIFY_RECORD_REDACTED -> VERIFY_RECORD_REDACTED | 10 |
 | VERIFY_RESTORE_BLOCKED -> VERIFY_RESTORE_BLOCKED | 6 |
 
-Cases whose step list is not an exact match (10):
+Cases whose step list is not an exact match (5):
 
 - `case_04` status COMPLETE (gold COMPLETE); missing `account_004`, `analytics_901`; extra `account_3865`
 - `case_08` status INCOMPLETE (gold INCOMPLETE); missing `account_008`; extra `account_5482`, `support_2351`
-- `case_09` status INCOMPLETE (gold INCOMPLETE); missing `audit_record_4902`; extra –
 - `case_10` status INCOMPLETE (gold INCOMPLETE); missing `account_010`; extra `account_007`
 - `case_18` status INCOMPLETE (gold INCOMPLETE); missing `audit_record_6645`; extra –
 - `case_20` status INCOMPLETE (gold INCOMPLETE); missing `audit_record_5569`; extra –
-- `case_23` status INCOMPLETE (gold INCOMPLETE); missing `audit_record_4128`; extra –
-- `case_24` status INCOMPLETE (gold INCOMPLETE); missing `audit_record_7095`; extra –
-- `case_29` status INCOMPLETE (gold INCOMPLETE); missing `audit_record_3954`; extra –
-- `case_30` status INCOMPLETE (gold INCOMPLETE); missing `audit_record_1707`; extra –
 
 ## 2. Intent classification
 
@@ -79,7 +74,7 @@ Evaluation texts: 375 unique, 375 labelled by the LLM; LLM/heuristic agreement *
 
 ## 3. Custom end-to-end evaluation cases
 
-15/15 hand-labelled scenarios pass. Each writes a miniature dataset in the real file formats, runs `main.py` as a subprocess and compares every output step (code: `code/tests/e2e/`).
+18/18 hand-labelled scenarios pass. Each writes a miniature dataset in the real file formats, runs `main.py` as a subprocess and compares every output step (code: `code/tests/e2e/`).
 
 | # | Scenario | Expected | Result |
 |---|---|---|---|
@@ -98,6 +93,9 @@ Evaluation texts: 375 unique, 375 labelled by the LLM; LLM/heuristic agreement *
 | 13 | `complete_cites_latest_evidence` | case_14: COMPLETE | pass |
 | 14 | `identifiers_joined_across_trace_lines` | case_15: INCOMPLETE | pass |
 | 15 | `unknown_identity_uses_bare_email` | case_16: INCOMPLETE | pass |
+| 16 | `retained_record_from_late_export` | case_17: INCOMPLETE | pass |
+| 17 | `late_export_never_supports_complete` | case_18: COMPLETE | pass |
+| 18 | `unknown_email_gets_no_timing_link` | case_19: COMPLETE | pass |
 
 ## 4. Invariants on the 518-case run (no labels needed)
 
@@ -109,7 +107,7 @@ Evaluation texts: 375 unique, 375 labelled by the LLM; LLM/heuristic agreement *
 | determinism | pass |
 | identifier_invariance | pass |
 | time_travel | pass |
-| time-travel cases re-run with later evidence physically removed | 51 |
+| time-travel cases re-run with later evidence physically removed | 518 |
 
 ## 5. Failures found and improvements made
 
@@ -128,13 +126,16 @@ Sample numbers are on all 32 public cases (status accuracy / exact sequence accu
 | 8 | Sample regression | An attachment last seen 199 days before case_07's request (it belongs to the same person's earlier February request) was attached to the September request. | Records last seen more than 90 days before the request are treated as an earlier lifecycle. | precision 0.963 → 0.978 |
 | 9 | Intent eval (L2) | The LLM labelled sample case_27 ("please audit the deletion … confirm the account was fully removed") NON_DELETE when batched with the own intent set. | Prompt states that requests to audit/confirm a removal reaffirm an erasure request. | LLM accuracy 98.9% → 100% on 94 texts |
 | 10 | Unit test | The budget allowed one more zero-estimate call after the cap was reached exactly. | `reserve` refuses when committed spend already equals the cap. | budget tests green |
+| 11 | External review (independent scorer) | 7 sample `VERIFY_RECORD_PRESENT` steps on retained security audit records were missing. Four of those records appear only in a records bundle *exported* two days after the audit, but its `security_audit_events` snapshot was *taken* at the audit instant; one appears in a later log export on a line timestamped before the audit. | A retained record that the subject's identifiers link to, seen only in a later export whose own snapshot/line time is at or before `audit_at`, adds an uncited post-remediation `VERIFY_RECORD_PRESENT` to an INCOMPLETE case. It never adds a finding or citation, never supports a COMPLETE verdict, and never changes a status. The time-travel invariant allows exactly this difference. | sequence 68.8% → 84.4% (holdout 60% → 100%); 116 eval rows gain the check |
+| 12 | External review (probe) | A request with an unknown email and copied timestamps was answered COMPLETE, citing an account attached only by workflow timing. | A subject that resolves to no identity gets no timing-only workflow link, so no verdict can rest on timing alone. | e2e `unknown_email_gets_no_timing_link`; 0 eval rows change |
+| 13 | External review (robustness) | Unreadable visual evidence (no cache or no vision backend) silently counted as "no records", which turns INCOMPLETE into COMPLETE. A requests CSV saved with a UTF-8 BOM crashed with `KeyError: 'case_id'`, and a wrong `--dataset-dir` printed a traceback. | Unreadable files are tracked; every COMPLETE verdict that could depend on one is marked `unverified_evidence` in its trace and counted on stderr, and `GDA_STRICT_EVIDENCE=1` turns this into exit code 4. CSVs are read as `utf-8-sig` with trimmed headers. Missing inputs give a one-line error and exit 1. | unit tests `test_byte_order_mark_and_padded_header`, `test_unreadable_visual_evidence_is_tracked` |
+| 14 | External review (metrics) | The field-level table was degenerate: steps were aligned on `(phase, system_id, resource_id)`, so those fields matched by construction. | Steps are paired by best field agreement (exact first). | non-degenerate field table |
 
 ## 6. Known limitations
 
-- Seven sample verification steps cite security audit records that appear in no participant evidence captured before
-  `audit_at` (some only in a snapshot captured two days after the audit). The engine never uses post-audit evidence, so
-  these steps are unreachable by design; they account for most of the remaining sample sequence gap.
-- Four hand-written sample cases (case_02/04/07/08/10) have accounts whose deletion activity sits outside the reported
+- Two sample verification steps (case_18 `audit_record_6645`, case_20 `audit_record_5569`) name security audit records
+  that appear in no participant file at all, so they cannot be derived.
+- Five hand-written sample cases (case_02/04/07/08/10) have accounts whose deletion activity sits outside the reported
   window or has no activity at all; the generic workflow linker sometimes picks a neighbouring account for them.
 - When several requests share one reporting window and no identifier links any of their accounts, the assignment of
   deletion workflows to requests is resolved by elimination and can swap two accounts. Status is unaffected; only the

@@ -97,15 +97,16 @@ def file_records(ef: EvidenceFile, payload: dict) -> list[RawRecord]:
     return out
 
 
-def extract(ef: EvidenceFile, llm) -> tuple[list[RawRecord], set]:
+def extract(ef: EvidenceFile, llm) -> tuple[list[RawRecord] | None, set]:
+    """None (not []) when the artifact could not be read: its contents are unknown, not empty."""
     if llm is None:
         log.warning("no LLM adapter: skipping visual evidence %s", ef.file_id)
-        return [], set()
+        return None, set()
     result = llm.complete(task="extract_visual", prompt=prompt_for(ef), images=[ef.path], json_schema=SCHEMA)
     payload = result.parsed_json if result else None
     if not isinstance(payload, dict):
         log.warning("visual extraction unavailable for %s", ef.file_id)
-        return [], set()
+        return None, set()
     records = records_from_payload(ef, payload)
     if not records:
         # no resource ids printed: the artifact may list stored files by name (second, cheaper pass)
