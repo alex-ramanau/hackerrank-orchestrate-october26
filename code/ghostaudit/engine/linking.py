@@ -104,6 +104,19 @@ class Linker:
                     found[o.attrs["_recreated_by"]].add(o.evidence_id)
         return found
 
+    def late_retained(self, subject: Subject, as_of: datetime) -> dict[str, list]:
+        """Retained records of the subject known only from a file exported after `as_of` whose own snapshot
+        time is at or before it. Such a record existed at the audit, but the file cannot be cited, so it may
+        only add an uncited post-remediation check to an INCOMPLETE case (never a finding or a verdict)."""
+        found: dict[str, list] = defaultdict(list)
+        for ident in sorted(subject.identifiers):
+            if ident[0] not in LINK_TYPES:
+                continue
+            for o in self.store.by_identifier(*ident):
+                if o.captured_at > as_of and o.observed_at <= as_of and o.kind == Kind.RETAINED:
+                    found[o.resource_id].append(o)
+        return found
+
     # ---------- workflow cadence ----------
     @staticmethod
     def phase(delta: timedelta) -> int:
@@ -186,6 +199,10 @@ class Linker:
     def workflow_candidates(self, case: Case, subject: Subject, direct: dict[str, set[str]],
                             lead_range: tuple[float, float] | None = None,
                             cutoff: datetime | None = None) -> list[tuple[float, Activity]]:
+        if not subject.user_id:
+            # timing proves nothing about who a deletion belonged to; without a resolved person (an unknown
+            # email) no workflow may be attached, so no verdict can rest on timing alone
+            return []
         as_of = min(case.audit_at, cutoff) if cutoff else case.audit_at
         lo, hi = case.requested_at, min(case.reported_at + REPORT_SLACK, as_of)
         uid = subject.user_id

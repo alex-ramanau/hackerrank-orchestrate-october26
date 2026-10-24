@@ -23,6 +23,7 @@ class ObservationStore:
     observations: list[Observation] = field(default_factory=list)
     coverage: list[Coverage] = field(default_factory=list)
     report: dict = field(default_factory=dict)  # per-file extraction stats
+    unreadable: list = field(default_factory=list)  # (file_id, captured_at) of evidence that could not be read
 
     def __post_init__(self):
         self._by_id: dict = defaultdict(list)

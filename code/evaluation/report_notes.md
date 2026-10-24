@@ -15,13 +15,16 @@ Sample numbers are on all 32 public cases (status accuracy / exact sequence accu
 | 8 | Sample regression | An attachment last seen 199 days before case_07's request (it belongs to the same person's earlier February request) was attached to the September request. | Records last seen more than 90 days before the request are treated as an earlier lifecycle. | precision 0.963 → 0.978 |
 | 9 | Intent eval (L2) | The LLM labelled sample case_27 ("please audit the deletion … confirm the account was fully removed") NON_DELETE when batched with the own intent set. | Prompt states that requests to audit/confirm a removal reaffirm an erasure request. | LLM accuracy 98.9% → 100% on 94 texts |
 | 10 | Unit test | The budget allowed one more zero-estimate call after the cap was reached exactly. | `reserve` refuses when committed spend already equals the cap. | budget tests green |
+| 11 | External review (independent scorer) | 7 sample `VERIFY_RECORD_PRESENT` steps on retained security audit records were missing. Four of those records appear only in a records bundle *exported* two days after the audit, but its `security_audit_events` snapshot was *taken* at the audit instant; one appears in a later log export on a line timestamped before the audit. | A retained record that the subject's identifiers link to, seen only in a later export whose own snapshot/line time is at or before `audit_at`, adds an uncited post-remediation `VERIFY_RECORD_PRESENT` to an INCOMPLETE case. It never adds a finding or citation, never supports a COMPLETE verdict, and never changes a status. The time-travel invariant allows exactly this difference. | sequence 68.8% → 84.4% (holdout 60% → 100%); 116 eval rows gain the check |
+| 12 | External review (probe) | A request with an unknown email and copied timestamps was answered COMPLETE, citing an account attached only by workflow timing. | A subject that resolves to no identity gets no timing-only workflow link, so no verdict can rest on timing alone. | e2e `unknown_email_gets_no_timing_link`; 0 eval rows change |
+| 13 | External review (robustness) | Unreadable visual evidence (no cache or no vision backend) silently counted as "no records", which turns INCOMPLETE into COMPLETE. A requests CSV saved with a UTF-8 BOM crashed with `KeyError: 'case_id'`, and a wrong `--dataset-dir` printed a traceback. | Unreadable files are tracked; every COMPLETE verdict that could depend on one is marked `unverified_evidence` in its trace and counted on stderr, and `GDA_STRICT_EVIDENCE=1` turns this into exit code 4. CSVs are read as `utf-8-sig` with trimmed headers. Missing inputs give a one-line error and exit 1. | unit tests `test_byte_order_mark_and_padded_header`, `test_unreadable_visual_evidence_is_tracked` |
+| 14 | External review (metrics) | The field-level table was degenerate: steps were aligned on `(phase, system_id, resource_id)`, so those fields matched by construction. | Steps are paired by best field agreement (exact first). | non-degenerate field table |
 
 ## 6. Known limitations
 
-- Seven sample verification steps cite security audit records that appear in no participant evidence captured before
-  `audit_at` (some only in a snapshot captured two days after the audit). The engine never uses post-audit evidence, so
-  these steps are unreachable by design; they account for most of the remaining sample sequence gap.
-- Four hand-written sample cases (case_02/04/07/08/10) have accounts whose deletion activity sits outside the reported
+- Two sample verification steps (case_18 `audit_record_6645`, case_20 `audit_record_5569`) name security audit records
+  that appear in no participant file at all, so they cannot be derived.
+- Five hand-written sample cases (case_02/04/07/08/10) have accounts whose deletion activity sits outside the reported
   window or has no activity at all; the generic workflow linker sometimes picks a neighbouring account for them.
 - When several requests share one reporting window and no identifier links any of their accounts, the assignment of
   deletion workflows to requests is resolved by elimination and can swap two accounts. Status is unaffected; only the

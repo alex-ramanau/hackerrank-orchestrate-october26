@@ -306,10 +306,58 @@ def unknown_identity_uses_bare_email():
     ])}
 
 
+# 16 ----------------------------------------------------------------------------------------------------------
+def late_export(ds, exported: str, snapshot: str, rid: str) -> str:
+    """A records bundle exported after the audit whose security snapshot was taken before it."""
+    import json
+    data = {"exported_at": exported, "source": "records_assurance_service", "snapshots": [{
+        "captured_at": snapshot, "data_store": "security_service", "collection": "security_audit_events",
+        "records": [{"resource_id": rid, "subject_reference": "user_101", "event_name": "account_deletion_reviewed",
+                     "actor_type": "automated_privacy_workflow", "integrity_seal": "sha256:" + "0" * 60 + "1f2e"}]}]}
+    return ds.evidence(f"evidence/records/customer_data_snapshot_bundle_{exported[:10].replace('-', '')}.json",
+                       exported, json.dumps(data, indent=2), "records_assurance_snapshot_bundle")
+
+
+def retained_record_from_late_export():
+    """A retained record seen only in a file exported after the audit (snapshot taken before it) adds an
+    uncited post-remediation check to an INCOMPLETE case; the late file is never cited."""
+    ds = base()
+    ds.readback_log("2026-05-10T10:00:00Z", [profile_lookup("account_7001", EMAIL), search_lookup("search_7002", EMAIL)])
+    late_export(ds, "2026-05-12T12:00:00Z", "2026-05-10T11:00:00Z", "audit_record_7020")
+    ds.request("case_17", EMAIL, REQ, REP, AUD)
+    return ds, {"case_17": ("INCOMPLETE", [
+        F("search_service", "search_7002", "REPORT_REMAINING_RECORD", "evidence_01"),
+        R("search_service", "search_7002", "DELETE_RECORD"),
+        V("account_service", "account_7001", "VERIFY_RECORD_ABSENT"),
+        V("search_service", "search_7002", "VERIFY_RECORD_ABSENT"),
+        V("security_service", "audit_record_7020", "VERIFY_RECORD_PRESENT"),
+    ])}
+
+
+def late_export_never_supports_complete():
+    """The same late file cannot be cited, so it adds nothing to a COMPLETE case, and a snapshot taken after the
+    audit adds nothing to an INCOMPLETE one."""
+    ds = base().user("user_104", "Ola Berg", "ola.berg@example.org", "+47 400 100 300")
+    ds.readback_log("2026-05-10T10:00:00Z", [profile_lookup("account_7001", EMAIL)])
+    late_export(ds, "2026-05-12T12:00:00Z", "2026-05-10T11:00:00Z", "audit_record_7021")
+    ds.request("case_18", EMAIL, REQ, REP, AUD)
+    return ds, {"case_18": ("COMPLETE", [V("account_service", "account_7001", "VERIFY_RECORD_ABSENT", "evidence_01")])}
+
+
+def unknown_email_gets_no_timing_link():
+    """A deletion workflow in the request window is not attached to an email that matches nobody: timing alone
+    proves nothing, so the case has no footprint (COMPLETE without steps) instead of a borrowed account."""
+    ds = base()
+    profile_deletion(ds, "account_7030", "2026-05-03T08:00:00Z")
+    ds.request("case_19", "nobody@nowhere.invalid", REQ, REP, AUD)
+    return ds, {"case_19": ("COMPLETE", [])}
+
+
 SCENARIOS = [
     historical_email_only, near_miss_decoys, evidence_after_audit_is_ignored, korean_non_deletion_request,
     success_claim_is_not_proof, failover_replica_drift, connector_recreates_deleted_entry, restorable_backup,
     tombstones_exposed_and_clean, support_message_vs_attachment, retained_audit_and_legal_hold,
     analytics_profile_vs_marketing_contact, complete_cites_latest_evidence, identifiers_joined_across_trace_lines,
-    unknown_identity_uses_bare_email,
+    unknown_identity_uses_bare_email, retained_record_from_late_export, late_export_never_supports_complete,
+    unknown_email_gets_no_timing_link,
 ]

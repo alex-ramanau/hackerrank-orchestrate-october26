@@ -79,6 +79,22 @@ class OutputTests(unittest.TestCase):
         self.assertEqual(validate_row("c", "NOT_APPLICABLE", "[]"), [])
 
 
+class LoaderTests(unittest.TestCase):
+    def test_byte_order_mark_and_padded_header(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "req.csv"
+            text = (D / "sample_deletion_requests.csv").read_text(encoding="utf-8").replace("case_id,", " case_id,", 1)
+            path.write_text("\ufeff" + text, encoding="utf-8")
+            self.assertEqual([c.case_id for c in loaders.load_cases(path)],
+                             [c.case_id for c in loaders.load_cases(D / "sample_deletion_requests.csv")])
+
+    def test_unreadable_visual_evidence_is_tracked(self):
+        man = [e for e in loaders.load_manifest(D / "evidence_files.csv", D) if e.path.suffix == ".png"][:2]
+        st = build_observation_store(man, [], LLMAdapter(backend="offline"))
+        self.assertEqual(sorted(f for f, _ in st.unreadable), sorted(e.file_id for e in man))
+        self.assertEqual(st.observations, [])
+
+
 class IdentityTests(unittest.TestCase):
     def setUp(self):
         self.r = IdentityResolver(loaders.load_identities(D / "user_identities.csv"), loaders.load_audit_log(D / "user_audit_log.csv"))

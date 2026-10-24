@@ -11,6 +11,7 @@ REPO = Path(__file__).resolve().parent.parent
 EXCLUDE_DIRS = {"__pycache__", ".runs", ".venv", "venv", "node_modules", ".git", ".pytest_cache", "ledger"}
 EXCLUDE_SUFFIXES = {".zip", ".tar", ".gz", ".tgz", ".7z", ".rar", ".pyc"}
 EXCLUDE_NAMES = {".env", ".DS_Store", "sample_predictions.csv"}
+ROOT_REPORTS = ("evaluation_report.md", "usage_report.md")
 
 
 def included(path: Path) -> bool:
@@ -28,7 +29,11 @@ def main() -> int:
     with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as zf:
         for f in files:
             zf.write(f, f.relative_to(REPO).as_posix())
-    print(f"wrote {target} ({len(files)} files, {target.stat().st_size / 1024:.0f} KiB)")
+        # the problem statement names evaluation/ at the archive root; the organizer README names code/evaluation/.
+        # Ship the two required reports at both paths so either reading finds them.
+        for name in ROOT_REPORTS:
+            zf.write(REPO / "code" / "evaluation" / name, f"evaluation/{name}")
+    print(f"wrote {target} ({len(files) + len(ROOT_REPORTS)} files, {target.stat().st_size / 1024:.0f} KiB)")
     return 0
 
 

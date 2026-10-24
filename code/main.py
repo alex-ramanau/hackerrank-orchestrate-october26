@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -43,6 +44,11 @@ def main(argv: list[str] | None = None) -> int:
     default_req = root / ("sample_deletion_requests.csv" if args.cases == "sample" else "deletion_requests.csv")
     requests = (args.requests or default_req).resolve()
     out = args.out or (REPO_ROOT / ("sample_predictions.csv" if args.cases == "sample" else "output.csv"))
+    missing = [p for p in (root, requests, *(DatasetPaths(root, requests).required())) if not p.exists()]
+    if missing:
+        print("error: dataset input not found: " + ", ".join(str(p) for p in missing), file=sys.stderr)
+        print("hint: pass --dataset-dir pointing at the participant dataset/ folder", file=sys.stderr)
+        return 1
     try:
         model = args.workflow_model
         if model is None and root == DEFAULT_DATASET_DIR.resolve() and not args.relearn_workflow_model:
@@ -59,6 +65,15 @@ def main(argv: list[str] | None = None) -> int:
     print(f"wrote {len(res.results)} rows to {out}: " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
     if res.llm is not None:
         print(res.llm.spend_line())
+    unread = sorted(res.context.store.unreadable)
+    at_risk = [r.case_id for r in res.results if r.trace.get("unverified_evidence")]
+    if unread:
+        print(f"warning: {len(unread)} visual evidence file(s) could not be read ({', '.join(f for f, _ in unread)}); "
+              f"{len(at_risk)} COMPLETE verdict(s) are unverified against them (see 'unverified_evidence' in traces)",
+              file=sys.stderr)
+        if at_risk and os.environ.get("GDA_STRICT_EVIDENCE") == "1":
+            print("error: GDA_STRICT_EVIDENCE=1 and some COMPLETE verdicts rest on unread evidence", file=sys.stderr)
+            return 4
     if res.errors:
         print(f"{len(res.errors)} output validation error(s):", file=sys.stderr)
         for e in res.errors[:20]:

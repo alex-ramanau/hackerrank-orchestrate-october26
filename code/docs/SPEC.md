@@ -432,6 +432,8 @@ the `openai` backend → visual extraction of images that the samples never cite
 | H3 | resource_id ordering is lexicographic | **Confirmed**: phase → operation-table index → system_id → resource_id, string compare (case_11/13/23). | unit test `test_ordering_matches_sample_case_11` |
 | H4 | Contact/marketing analytics → DELETE | **Confirmed**: `email_opt_in` / contact lookups are MARKETING_PROFILE → REPORT_REMAINING_RECORD. | case_12 |
 | H5 | Anonymized analytics stays owned via earlier links | **Refuted**: nothing links them by identifier; they are owned through the deletion workflow (learned cadence of successful policy actions after the profile deletion). | case_03/21/25–28 |
+| H6 | A retained record seen only in a later *export* existed at the audit when the export's own snapshot/line time is ≤ audit_at | **Confirmed**: 5 of 7 missing sample `VERIFY_RECORD_PRESENT` steps (case_09/23/24/29/30). Used only as an uncited post-remediation check in INCOMPLETE cases (no finding, citation or status change). | sample sequence 68.8% → 84.4% |
+| H7 | Timing-only workflow links need a resolved person | **Adopted** after an unknown-email probe produced a COMPLETE from a borrowed account: no workflow is attached to a subject without a user_id. | e2e `unknown_email_gets_no_timing_link` |
 
 ## 11. Non-negotiables
 - Use only `dataset/` participant files. Never read anything outside `dataset/` for predictions. No hardcoded case labels.

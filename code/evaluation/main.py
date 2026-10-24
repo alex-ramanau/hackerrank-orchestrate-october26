@@ -126,13 +126,48 @@ def scenario_results() -> list[dict]:
 
 
 # ------------------------------------------------------------------ usage
+# Anthropic vision input: an image is downscaled to <= ~1.15 MP, about (w * h) / 750 tokens, i.e. <= ~1,600; a PDF
+# page is sent as an image plus its text layer (estimated at the image allowance + 500).
+IMAGE_TOKEN_CAP = 1600
+PDF_PAGE_TOKENS = IMAGE_TOKEN_CAP + 500
+
+
+def image_tokens(path: Path) -> int:
+    import struct
+    data = path.read_bytes()
+    if path.suffix.lower() == ".pdf":
+        return PDF_PAGE_TOKENS * max(1, len(re.findall(rb"/Type\s*/Page[^s]", data)))
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        w, h = struct.unpack(">II", data[16:24])
+        return min(IMAGE_TOKEN_CAP, w * h // 750)
+    return IMAGE_TOKEN_CAP
+
+
 def usage_from_final_run(tmp: Path) -> dict:
-    """Replays the final full-dataset run and attributes every LLM result it used to the call that produced it."""
+    """Replays the final full-dataset run and attributes every LLM result it used to the call that produced it.
+
+    It also records each request's own payload (prompt text + images), which estimates what the direct
+    `anthropic` backend would send: the `claude -p` counts include the CLI's system prompt and cache traffic."""
     ledger_dir = tmp / "usage_ledger"
     paths = DatasetPaths(DEFAULT_DATASET_DIR, DEFAULT_DATASET_DIR / "deletion_requests.csv")
-    res = run(paths, tmp / "final_output.csv", backend="replay", ledger_dir=ledger_dir, workflow_model=MODEL)
+    payload: dict = {}
+    original = LLMAdapter.complete
+
+    def recording(self, *, task, prompt, images=None, model=None, json_schema=None):
+        before = len(self.ledger.entries)
+        result = original(self, task=task, prompt=prompt, images=images, model=model, json_schema=json_schema)
+        for e in self.ledger.entries[before:]:
+            payload[e["key"]] = len(prompt) // 4 + sum(image_tokens(Path(i)) for i in (images or []))
+        return result
+
+    LLMAdapter.complete = recording
+    try:
+        res = run(paths, tmp / "final_output.csv", backend="replay", ledger_dir=ledger_dir, workflow_model=MODEL)
+    finally:
+        LLMAdapter.complete = original
     cache = LLMCache()
-    per_model: dict = defaultdict(lambda: {"calls": 0, "tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0, "tasks": Counter(), "provider": ""})
+    per_model: dict = defaultdict(lambda: {"calls": 0, "tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0, "tasks": Counter(),
+                                           "provider": "", "payload_in": 0})
     seen = set()
     for e in res.llm.ledger.entries:
         if e["key"] in seen:   # the same cached result can be requested twice (visual prefetch + extraction)
@@ -146,9 +181,11 @@ def usage_from_final_run(tmp: Path) -> dict:
         m["cost_usd"] += float(rec.get("cost_usd", 0.0))
         m["tasks"][e["task"]] += 1
         m["provider"] = rec.get("provider", "")
+        m["payload_in"] += payload.get(e["key"], 0)
     identical = (tmp / "final_output.csv").read_bytes() == (REPO / "output.csv").read_bytes() if (REPO / "output.csv").exists() else None
     from ghostaudit.llm.ledger import total_spend
     return {"per_model": per_model, "requests": len(res.results), "replay_hits": len(seen),
+            "lookups": len(res.llm.ledger.entries),
             "identical_to_output_csv": identical, "budget_limit": res.llm.budget.limit, "spent_total": total_spend()}
 
 
@@ -160,7 +197,9 @@ def metrics_table(m: dict) -> list[str]:
         s = m[name]
         rows.append(f"| {name} | {s['cases']} | {pct(s['status_accuracy'])} | {pct(s['step_precision'])} | {pct(s['step_recall'])} "
                     f"| {pct(s['step_f1'])} | {pct(s['sequence_accuracy'])} | {pct(s['citation_accuracy'])} |")
-    rows += ["", "Field-level accuracy (gold steps aligned on `(phase, system_id, resource_id)`):", "",
+    rows += ["", "Field-level accuracy: each gold step is paired with a predicted step of the same case (exact matches "
+             "first, then the unused step agreeing on most fields, >= 2), so every field, the resource included, is "
+             "scored on its own; an unpaired gold step counts as wrong on every field.", "",
              "| Field | " + " | ".join(m["all"]["field_accuracy"]) + " |",
              "|---" * (len(m["all"]["field_accuracy"]) + 1) + "|",
              "| all | " + " | ".join(pct(v) for v in m["all"]["field_accuracy"].values()) + " |"]
@@ -220,7 +259,9 @@ def render_usage(u: dict) -> str:
              "LLM cache, so its marginal cost is $0; the table attributes every cached result it used to the live call "
              "that produced it (Claude subscription through `claude -p`, cost = the CLI's API-equivalent `total_cost_usd`).", "",
              f"- Requests processed: **{u['requests']}**",
-             f"- Cached LLM results used by the final run: **{u['replay_hits']}** (live calls during the final run: 0)",
+             f"- Cached LLM results used by the final run: **{u['replay_hits']}** unique results, served by "
+             f"{u['lookups']} cache lookups (the visual prefetch and the extraction pass look the same result up "
+             f"twice; the run log's \"cache hits\" counts lookups). Live calls during the final run: 0",
              f"- Replay output byte-identical to the submitted `output.csv`: **{u['identical_to_output_csv']}**",
              f"- Spending cap (`GDA_BUDGET_USD`): ${u['budget_limit']:.2f}; live spend recorded in this checkout's development "
              f"ledgers (`code/cache/ledger/`, all trial runs included): ${u['spent_total']:.2f}", "",
@@ -236,7 +277,24 @@ def render_usage(u: dict) -> str:
     lines.append(f"| **all** | | | **{tot['calls']}** | **{tot['tokens_in']:,}** | **{tot['tokens_out']:,}** | "
                  f"**{tot['tokens_in'] + tot['tokens_out']:,}** | **${tot['cost_usd']:.4f}** |")
     n = u["requests"] or 1
-    lines += ["", "Per request (518 requests):", "",
+    from ghostaudit.llm.pricing import cost as price_cost
+    lines += ["", "Direct-API estimate (`GDA_LLM_BACKEND=anthropic`, same prompts, same outputs). Input = the request's "
+              "own payload: prompt characters / 4 plus the image allowance (<= 1,600 tokens per screenshot, ~2,100 per PDF "
+              "page); no CLI system prompt, no prompt-cache traffic. An estimate, not a measured run.", "",
+              "| Model | Calls | Est. input tokens | Output tokens | Est. total tokens | Est. cost (USD) |", "|---|---|---|---|---|---|"]
+    est = {"payload_in": 0, "tokens_out": 0, "cost": 0.0}
+    for model, m in sorted(u["per_model"].items()):
+        c = price_cost(model, m["payload_in"], m["tokens_out"])
+        lines.append(f"| `{model}` | {m['calls']} | {m['payload_in']:,} | {m['tokens_out']:,} | "
+                     f"{m['payload_in'] + m['tokens_out']:,} | ${c:.4f} |")
+        est["payload_in"] += m["payload_in"]
+        est["tokens_out"] += m["tokens_out"]
+        est["cost"] += c
+    lines.append(f"| **all** | **{tot['calls']}** | **{est['payload_in']:,}** | **{est['tokens_out']:,}** | "
+                 f"**{est['payload_in'] + est['tokens_out']:,}** | **${est['cost']:.4f}** |")
+    lines += ["", f"Direct API per request: ~{(est['payload_in'] + est['tokens_out']) / n:,.1f} tokens, "
+              f"~${est['cost'] / n:.5f}.", ""]
+    lines += ["Per request (518 requests, measured `claude -p` counts):", "",
               f"- Average tokens per request: **{(tot['tokens_in'] + tot['tokens_out']) / n:,.1f}** "
               f"({tot['tokens_in'] / n:,.1f} in / {tot['tokens_out'] / n:,.1f} out)",
               f"- Estimated cost per request: **${tot['cost_usd'] / n:.5f}**; estimated total: **${tot['cost_usd']:.4f}**", "",
@@ -247,7 +305,10 @@ def render_usage(u: dict) -> str:
               "- Input token counts include prompt-cache reads/writes reported by the CLI (the CLI adds its own system prompt), "
               "which is why visual calls show large input counts at a small cost.",
               "- Everything else (parsing, linking, state reconstruction, policy, planning) is deterministic code: 0 tokens.",
-              "- Re-running with an empty cache costs about the total above; `GDA_BUDGET_USD` caps it (default $3.00).", ""]
+              "- Re-running with an empty cache costs about the measured total above through `claude -p`, or about the "
+              "direct-API estimate through `GDA_LLM_BACKEND=anthropic`; `GDA_BUDGET_USD` caps either (default $3.00).",
+              "- Development runs are separate from these final-run figures: the ledgers record every development "
+              "call, including prompt iterations whose cache entries were later pruned.", ""]
     return "\n".join(lines)
 
 
