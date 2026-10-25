@@ -5,7 +5,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from .loaders import email_hash, normalize_email, normalize_phone
+from .loaders import email_hash, normalize_email, normalize_phone, normalize_text
 from .models import AuditEntry, Identity
 
 
@@ -36,7 +36,7 @@ def norm_identifier(kind: str, value: str) -> tuple[str, str] | None:
     if kind == "user_id":
         return ("user_id", v.lower())
     if kind == "name":
-        return ("name", " ".join(v.lower().split()))
+        return ("name", " ".join(normalize_text(v).split()))
     return (kind, v)
 
 
@@ -80,7 +80,7 @@ class IdentityResolver:
             if n:
                 ids.add(n)
         if ident.name:
-            names.add(" ".join(ident.name.lower().split()))
+            names.add(" ".join(normalize_text(ident.name).split()))
         hist = []
         for a in self.history.get(uid, []):
             hist.append((a.field_name, a.old_value, a.new_value, a.event_time.isoformat() if a.event_time else None, a.audit_id))
@@ -88,7 +88,7 @@ class IdentityResolver:
                 kind = {"email": "email", "phone": "phone", "email_hash": "email_hash", "name": "name"}.get(a.field_name)
                 if kind == "name":
                     if v:
-                        names.add(" ".join(v.lower().split()))
+                        names.add(" ".join(normalize_text(v).split()))
                     continue
                 n = norm_identifier(kind, v) if kind else None
                 if n:

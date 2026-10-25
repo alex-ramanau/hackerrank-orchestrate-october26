@@ -117,10 +117,10 @@ def audit_case(case: Case, ctx: AuditContext) -> CaseResult:
     earlier = ctx.earlier_audit(case, subject)
     plans: list[ResourcePlan] = []
     for rid in sorted(owned):
-        system_id = system_for(rid)
+        observations = ctx.store.by_resource(rid)
+        system_id = _system_of(rid, observations, case.audit_at)
         if system_id == "unknown":
             continue
-        observations = ctx.store.by_resource(rid)
         category = _category(observations, case.audit_at)
         state = reconstruct(observations, case.audit_at)
         decision = ctx.policy.decide(system_id, category, state.attrs, case.audit_at)
@@ -151,7 +151,7 @@ def audit_case(case: Case, ctx: AuditContext) -> CaseResult:
         for rid, obs in sorted(ctx.linker.late_retained(subject, case.audit_at).items()):
             if rid in planned or any(o.captured_at <= case.audit_at for o in ctx.store.by_resource(rid)):
                 continue
-            system_id = system_for(rid)
+            system_id = _system_of(rid, obs, None)
             category = next((o.category for o in obs if o.category), None)
             decision = ctx.policy.decide(system_id, category, {}, case.audit_at)
             if decision.treatment != "RETAIN":
@@ -169,6 +169,17 @@ def audit_case(case: Case, ctx: AuditContext) -> CaseResult:
         for p in plans
     ]
     return CaseResult(case.case_id, status, steps, trace)
+
+
+def _system_of(rid: str, observations: list, as_of) -> str:
+    """The system a resource lives in: its id prefix, else the system its own evidence names (an origin_system
+    column, a log line's service) for resource ids outside the known prefixes."""
+    system_id = system_for(rid)
+    if system_id != "unknown":
+        return system_id
+    named = sorted({o.system_id for o in observations if o.system_id != "unknown" and o.location != "activity"
+                    and (as_of is None or o.captured_at <= as_of)})
+    return named[0] if named else "unknown"
 
 
 def _flag_unverified(case: Case, ctx: AuditContext, trace: dict) -> None:

@@ -5,6 +5,7 @@ import csv
 import hashlib
 import logging
 import re
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -42,8 +43,13 @@ def _ts(value: str | None, where: str) -> datetime | None:
     return dt
 
 
+def normalize_text(value: str) -> str:
+    """Canonical form for matching: NFKC (composed é == e + combining accent, full-width == ASCII) + casefold."""
+    return unicodedata.normalize("NFKC", value or "").strip().casefold()
+
+
 def normalize_email(value: str) -> str:
-    return (value or "").strip().lower()
+    return normalize_text(value)
 
 
 def normalize_phone(value: str) -> str:
@@ -91,10 +97,17 @@ def load_rules(path: Path) -> list[Rule]:
 def load_manifest(path: Path, dataset_root: Path) -> list[EvidenceFile]:
     """A file whose capture time cannot be read cannot be placed before any cutoff, so it is skipped."""
     out = []
+    root = dataset_root.resolve()
     for r in _rows(path):
         captured = _ts(r["captured_at"], f"evidence_files.csv {r['file_id']}")
-        if captured is not None:
-            out.append(EvidenceFile(r["file_id"], dataset_root / r["file_path"], r["origin"], captured))
+        if captured is None:
+            continue
+        file_path = (root / r["file_path"]).resolve()
+        if not file_path.is_relative_to(root):
+            # an absolute path or "../" must not make the agent read outside the dataset
+            log.warning("evidence_files.csv %s points outside the dataset (%s); skipped", r["file_id"], r["file_path"])
+            continue
+        out.append(EvidenceFile(r["file_id"], file_path, r["origin"], captured))
     return out
 
 

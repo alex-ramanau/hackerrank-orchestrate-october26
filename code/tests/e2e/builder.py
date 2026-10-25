@@ -114,6 +114,17 @@ CREATE TABLE security_audit_records (resource_id TEXT PRIMARY KEY, subject_refer
         return self.evidence(f"evidence/databases/customer_accounts_failover_replica_{captured[:10].replace('-', '')}.sql",
                              captured, body, "customer_account_failover_replica_capture")
 
+    def json_table_sql(self, captured: str, rows: list[tuple[str, str, str, dict]]) -> str:
+        """JSON-in-table snapshot (customer_data_primary): (resource_id, origin_system, collection, document)."""
+        body = ("BEGIN TRANSACTION;\nCREATE TABLE customer_data_primary (resource_id TEXT PRIMARY KEY, origin_system TEXT NOT NULL, "
+                "collection_name TEXT NOT NULL, record_json TEXT NOT NULL, updated_at TEXT NOT NULL);\n")
+        for rid, system, collection, doc in rows:
+            body += (f"INSERT INTO \"customer_data_primary\" VALUES('{rid}','{system}','{collection}',"
+                     f"'{json.dumps(doc, ensure_ascii=False)}','{captured}');\n")
+        body += "COMMIT;\n"
+        return self.evidence(f"evidence/databases/customer_data_json_{captured[:10].replace('-', '')}.sql", captured, body,
+                             "customer_data_inventory_capture")
+
     def bundle_json(self, captured: str, snapshots: list[tuple[str, str, list[dict]]]) -> str:
         data = {"exported_at": captured, "source": "records_assurance_service",
                 "snapshots": [{"captured_at": captured, "data_store": ds, "collection": col, "records": recs}
