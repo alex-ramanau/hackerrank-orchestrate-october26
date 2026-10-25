@@ -18,7 +18,7 @@ python3 code/main.py                    # 518 requests -> ./output.csv   (~12 s)
 python3 code/main.py --cases sample     # 32 public samples -> ./sample_predictions.csv
 python3 code/evaluation/main.py         # metrics + regenerate both reports (~1.5 min)
 python3 code/evaluation/check_all.py    # quality gate: tests, sample regression, invariants, 11 checks (~40 s)
-python3 -m unittest discover -s code/tests -t code   # 32 unit + 28 end-to-end tests (25 scenarios + 3 unread-evidence)
+python3 -m unittest discover -s code/tests -t code   # 32 unit + 30 end-to-end tests (25 scenarios + 5 unread/missing evidence)
 python3 code/package.py                 # build code.zip (README.md + code/ + evaluation/ report copies, no dataset)
 ```
 
@@ -94,7 +94,8 @@ dataset/ ─► loaders ─► IdentityResolver (current + historical email/phon
   check is reproducible without Tesseract installed; with no OCR text nothing is dropped. On the 15 real images 34/34
   Sonnet records are grounded; on the edge screenshots it drops the IDs a local VLM invented (`export_001/002`).
   Optional tools: `sudo apt install tesseract-ocr tesseract-ocr-rus poppler-utils`.
-- **Unread evidence is never silent.** If a screenshot/PDF cannot be transcribed (empty cache, no vision backend),
+- **Unread evidence is never silent.** If a screenshot/PDF cannot be transcribed (empty cache, no vision backend), or a
+  file listed in `evidence_files.csv` is missing,
   every COMPLETE verdict of a request during which it was captured is marked `unverified_evidence` in its trace,
   counted on stderr, and the run exits 4 (opt out with `GDA_STRICT_EVIDENCE=0`). When the file's OCR text is known
   and shows none of the person's identifiers or resource ids, it is about somebody else and does not count for that

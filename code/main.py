@@ -74,13 +74,13 @@ def main(argv: list[str] | None = None) -> NoReturn:
     unread = sorted(res.context.store.unreadable)
     at_risk = [r.case_id for r in res.results if r.trace.get("unverified_evidence")]
     if unread:
-        print(f"warning: {len(unread)} visual evidence file(s) had no vision-model result (unread, or OCR fallback only: {', '.join(f for f, _ in unread)}); "
+        print(f"warning: {len(unread)} evidence file(s) could not be fully read (missing, no vision-model result, or OCR only: {', '.join(f for f, _ in unread)}); "
               f"{len(at_risk)} COMPLETE verdict(s) are unverified against them (see 'unverified_evidence' in traces)",
               file=sys.stderr)
         if at_risk and os.environ.get("GDA_STRICT_EVIDENCE", "1") != "0":
             # fail loudly rather than towards COMPLETE: every row is written, but the run is not a clean pass
-            print("error: some COMPLETE verdicts rest on evidence that could not be read; restore the LLM cache or "
-                  "a vision backend, or set GDA_STRICT_EVIDENCE=0 to accept them", file=sys.stderr)
+            print("error: some COMPLETE verdicts rest on evidence that could not be read; restore the missing file, "
+                  "the LLM cache or a vision backend, or set GDA_STRICT_EVIDENCE=0 to accept them", file=sys.stderr)
             sys.exit(EXIT_UNVERIFIED_EVIDENCE)
     if res.errors:
         print(f"{len(res.errors)} output validation error(s):", file=sys.stderr)

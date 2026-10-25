@@ -76,15 +76,14 @@ class UnreadEvidenceScopeTests(unittest.TestCase):
 class MissingEvidenceTests(unittest.TestCase):
     """Finding (2026-10-25, owner's removal test): a file listed in evidence_files.csv but missing on disk was
     skipped without a trace, so a request whose only finding was in it turned COMPLETE with exit 0. Its contents
-    are unknown, exactly like an unreadable screenshot."""
+    are unknown, exactly like an unreadable screenshot. Fixed: it now counts as unread for every request in its
+    window."""
 
-    @unittest.expectedFailure
     def test_missing_listed_screenshot_counts_as_unread(self):
         code, flags = run(None, "evidence/images/connector_console_20260508.png", present=False)
         self.assertEqual(flags, {"case_30": ["evidence_02"], "case_31": ["evidence_02"]})
         self.assertEqual(code, 4)
 
-    @unittest.expectedFailure
     def test_missing_listed_snapshot_counts_as_unread(self):
         code, flags = run(None, "evidence/databases/customer_data_inventory_20260508.sql", present=False)
         self.assertEqual(flags, {"case_30": ["evidence_02"], "case_31": ["evidence_02"]})

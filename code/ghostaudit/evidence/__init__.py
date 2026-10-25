@@ -44,7 +44,11 @@ def build_observation_store(manifest: list[EvidenceFile], activities: list[Activ
     for ef in sorted(manifest, key=lambda e: e.file_id):
         suffix = ef.path.suffix.lower()
         if not ef.path.exists():
+            # listed but not there: its contents are unknown, exactly like an unreadable screenshot
+            log.warning("%s is listed in evidence_files.csv but missing: %s", ef.file_id, ef.path)
             store.report[ef.file_id] = {"path": str(ef.path), "error": "missing"}
+            store.unreadable.append((ef.file_id, ef.captured_at))
+            store.unread_text[ef.file_id] = None
             continue
         if suffix in EXTRACTORS:
             records, cov = EXTRACTORS[suffix](ef)
