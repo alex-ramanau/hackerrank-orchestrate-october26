@@ -21,9 +21,12 @@ NEGATION_PATTERNS = [
     r"\b(?:do not|don't|dont|please don't|without)\s+(?:\w+\s+){0,2}(?:clos|delet|remov|eras|chang)",
     r"\b(?:keep|leave) (?:the|my) (?:account|profile)",
     r"\bleave the account active\b|\bcontinue using\b|\bstill (?:want|need|use)\b",
+    r"\b(?:thinking|considering) (?:about )?(?:delet|clos|remov)\w*\b[^.]*[.?]\s*what would happen\b",
     r"\bmarketing (?:\w+ )?only\b|\bonly\b[^.]*\bmarketing\b",
     r"no (?:quiero|deseo) (?:eliminar|borrar)|ne (?:pas|veux pas) (?:supprimer|fermer)",
     r"삭제하지\s*마|削除しないで|não (?:quero )?(?:excluir|apagar)",
+    r"\bне (?:нужно |надо |стоит )?(?:удаля|удали|стира|закрыва)|\bnie (?:usuwa|kasuj|zamyka)|\bnicht (?:lösch|entfern)",
+    r"请不要删除|不要删除|لا تحذف|मत हटा",
 ]
 # Topics that are not deletion on their own.
 NON_DELETE_TOPICS = [
@@ -37,13 +40,23 @@ NON_DELETE_TOPICS = [
 DELETION_PATTERNS = [
     r"\bdelet\w*|\beras\w*|\bremov\w*|\bclos(?:e|ing|ure)\b|\bpurge\b|\bwipe\b|\bforget me\b|right to be forgotten",
     r"\b(?:profile|account|data) is gone\b|\bcannot identify me\b|\bcan't identify me\b|\bno longer identif",
+    r"\bget rid of (?:my|the)\b|\bnothing\b[^.]*\bcan identify me\b",
     r"\bsuppression\b",
-    r"\belimina\w*|\bborra\w*|\bsuprim\w*",                       # es
+    r"\belimin\w*|\bborr[aeoá]\w*|\bsuprim\w*|\bcerrar\b",          # es
     r"\bsupprim\w*|\beffac\w*|\bfermer\b|\bfermeture\b",          # fr
     r"\bexclu\w*|\bapag\w*|\bencerr\w*",                           # pt
     r"\blösch\w*|\bentfern\w*|\bschließ\w*|\bkündig\w*",           # de
     r"削除|退会|消去|抹消",                                         # ja
     r"삭제|탈퇴|폐쇄",                                              # ko
+    r"\bудал\w*|\bстер\w*|\bсотр\w*|\bзакры\w*",                 # ru
+    r"\bвидал\w*|\bвилуч\w*",                                     # uk
+    r"\busu[nń]\w*|\bskasuj\w*|\bzamkni\w*",                      # pl
+    r"\bcancell\w*|\bchiud\w*",                                   # it
+    r"\bverwijder\w*|\bopheffen\b",                               # nl
+    r"\bsil(?:in|iniz|mek|menizi)\b|\bkapat\w*",                   # tr
+    r"删除|刪除|注销|註銷|清除",                                    # zh
+    r"حذف|احذف|امسح|مسح",                                         # ar
+    r"हटा|मिटा",                                                   # hi
 ]
 
 

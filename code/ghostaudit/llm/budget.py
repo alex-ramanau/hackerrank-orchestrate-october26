@@ -4,12 +4,13 @@ from __future__ import annotations
 import os
 import threading
 
+from ..config import EXIT_BUDGET_EXCEEDED
 from .ledger import Ledger, total_spend
 from .pricing import IMAGE_TOKENS_EST, price_for
 
 
 class BudgetExceeded(RuntimeError):
-    exit_code = 3
+    exit_code = EXIT_BUDGET_EXCEEDED
 
 
 class Budget:

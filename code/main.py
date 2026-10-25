@@ -15,17 +15,21 @@ import logging
 import os
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from ghostaudit.config import CACHE_DIR, DEFAULT_DATASET_DIR, REPO_ROOT, DatasetPaths  # noqa: E402
+from ghostaudit.config import (  # noqa: E402
+    CACHE_DIR, DEFAULT_DATASET_DIR, EXIT_INPUT_MISSING, EXIT_INVALID_OUTPUT, EXIT_OK, EXIT_UNVERIFIED_EVIDENCE, REPO_ROOT,
+    DatasetPaths,
+)
 from ghostaudit.llm.budget import BudgetExceeded  # noqa: E402
 from ghostaudit.pipeline import run  # noqa: E402
 
 MODEL_PATH = CACHE_DIR / "workflow_model.json"
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> NoReturn:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dataset-dir", type=Path, default=DEFAULT_DATASET_DIR)
     ap.add_argument("--cases", choices=["eval", "sample"], default="eval")
@@ -48,7 +52,7 @@ def main(argv: list[str] | None = None) -> int:
     if missing:
         print("error: dataset input not found: " + ", ".join(str(p) for p in missing), file=sys.stderr)
         print("hint: pass --dataset-dir pointing at the participant dataset/ folder", file=sys.stderr)
-        return 1
+        sys.exit(EXIT_INPUT_MISSING)
     try:
         model = args.workflow_model
         if model is None and root == DEFAULT_DATASET_DIR.resolve() and not args.relearn_workflow_model:
@@ -58,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
                   workflow_model=model, save_model=save)
     except BudgetExceeded as exc:
         print(f"error: {exc}", file=sys.stderr)
-        return BudgetExceeded.exit_code
+        sys.exit(BudgetExceeded.exit_code)
     counts: dict[str, int] = {}
     for r in res.results:
         counts[r.deletion_status] = counts.get(r.deletion_status, 0) + 1
@@ -75,14 +79,14 @@ def main(argv: list[str] | None = None) -> int:
             # fail loudly rather than towards COMPLETE: every row is written, but the run is not a clean pass
             print("error: some COMPLETE verdicts rest on evidence that could not be read; restore the LLM cache or "
                   "a vision backend, or set GDA_STRICT_EVIDENCE=0 to accept them", file=sys.stderr)
-            return 4
+            sys.exit(EXIT_UNVERIFIED_EVIDENCE)
     if res.errors:
         print(f"{len(res.errors)} output validation error(s):", file=sys.stderr)
         for e in res.errors[:20]:
             print("  " + e, file=sys.stderr)
-        return 2
-    return 0
+        sys.exit(EXIT_INVALID_OUTPUT)
+    sys.exit(EXIT_OK)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

@@ -18,7 +18,7 @@ python3 code/main.py                    # 518 requests -> ./output.csv   (~12 s)
 python3 code/main.py --cases sample     # 32 public samples -> ./sample_predictions.csv
 python3 code/evaluation/main.py         # metrics + regenerate both reports (~1.5 min)
 python3 code/evaluation/check_all.py    # quality gate: tests, sample regression, invariants (~40 s)
-python3 -m unittest discover -s code/tests -t code   # 26 unit + 20 end-to-end scenario tests
+python3 -m unittest discover -s code/tests -t code   # 28 unit + 24 end-to-end scenario tests
 python3 code/package.py                 # build code.zip (README.md + code/ + evaluation/ report copies, no dataset)
 ```
 
@@ -47,10 +47,10 @@ CLI options of `code/main.py`: `--dataset-dir DIR`, `--requests FILE`, `--out PA
 decision trace per case: identifiers, owned resources, how each was linked, the observations and the rule applied),
 `--backend NAME`, `--workflow-model PATH`, `--relearn-workflow-model`, `-v`.
 
-Exit codes: `0` ok · `1` dataset input missing (one-line message naming the files) · `2` output failed contract
+Exit codes (named constants `EXIT_*` in `code/ghostaudit/config.py`): `0` ok · `1` dataset input missing (one-line message naming the files) · `2` output failed contract
 validation · `3` budget exceeded with `GDA_BUDGET_ON_EXCEED=abort` · `4` a COMPLETE verdict rests on unread
 visual evidence (default; `GDA_STRICT_EVIDENCE=0` to accept). Rows are sorted by `case_id` as a string (`case_100` before `case_99`), which is what any
-sort routine produces; graders that join on `case_id` are unaffected either way. CSV inputs saved with a UTF-8 byte-order mark (spreadsheet exports) are accepted.
+sort routine produces; graders that join on `case_id` are unaffected either way. CSV inputs saved with a UTF-8 byte-order mark (spreadsheet exports) are accepted. Emails and names are matched after Unicode NFKC normalisation and casefolding, and manifest paths that point outside `--dataset-dir` are skipped.
 
 ## How it works
 
@@ -99,7 +99,7 @@ dataset/ ─► loaders ─► IdentityResolver (current + historical email/phon
 | Sample status accuracy (dev / holdout) | 100% / 100% |
 | Sample step F1 · exact sequence | 97.4% · 84.4% (holdout 100%); the rest are 2 audit records absent from every file and 3 hand-written accounts |
 | Intent: own 62-text multilingual set + 32 samples (LLM) | 100% accuracy, NON_DELETE recall 100% |
-| Custom end-to-end scenarios | 20 / 20 |
+| Custom end-to-end scenarios | 24 / 24 |
 | Invariants on the 518-case run | contract, citations ≤ audit_at, policy sanity, determinism, identifier invariance, time travel: all pass |
 | LLM cost to build the cache used by the final run | ≈ $1.37 (34 calls via `claude -p`; ≈ $0.20 estimated via the direct API), $0 marginal for replay runs |
 

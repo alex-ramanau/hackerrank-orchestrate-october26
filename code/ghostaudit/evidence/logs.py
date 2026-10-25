@@ -15,7 +15,7 @@ from ..models import EvidenceFile
 from .records import REFERENCE_FIELDS, RawRecord, system_for
 
 KV_RE = re.compile(r'([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S+)')
-BRACKET_RE = re.compile(r"^\[(?P<level>\w+)\]\s+\[(?P<service>[\w.-]+)\]\s+\[(?P<trace>[\w.-]+)\]\s+(?P<event>\w+):")
+BRACKET_RE = re.compile(r"^\[(?P<level>\w+)\]\s+\[(?P<service>[\w.-]+)\](?:\s+\[(?P<trace>[\w.-]+)\])?\s+(?P<event>\w+):")
 PIPE_RE = re.compile(r"^\|\s*(?P<level>\w+)\s*\|\s*(?P<service>[\w.-]+)\s*\|\s*(?P<trace>[\w.-]+)\s*\|\s*(?P<event>\w+)\s*\|")
 SYSLOG_RE = re.compile(r"^<\d+>\d+\s+\S+\s+(?P<service>[\w.-]+)\s+(?P<trace>[\w.-]+)\s+-\s+-\s")
 TRACE_PREFIXES = ("tr-", "rb-")
@@ -49,7 +49,8 @@ def parse_line(line: str) -> dict | None:
             m = rx.match(rest)
             if m:
                 fields.update({k: v for k, v in m.groupdict().items() if v})
-                fields["trace_id"] = fields.pop("trace")
+                if "trace" in fields:
+                    fields["trace_id"] = fields.pop("trace")
                 rest = rest[m.end():]
                 break
         for k, v in KV_RE.findall(rest):

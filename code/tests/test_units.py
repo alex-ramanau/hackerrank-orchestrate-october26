@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ghostaudit import loaders
 from ghostaudit.config import DEFAULT_DATASET_DIR as D
+from ghostaudit.config import EXIT_BUDGET_EXCEEDED
 from ghostaudit.engine.policy import Policy
 from ghostaudit.engine.state import reconstruct
 from ghostaudit.evidence import build_observation_store
@@ -93,6 +94,25 @@ class LoaderTests(unittest.TestCase):
         st = build_observation_store(man, [], LLMAdapter(backend="offline"))
         self.assertEqual(sorted(f for f, _ in st.unreadable), sorted(e.file_id for e in man))
         self.assertEqual(st.observations, [])
+
+    def test_unicode_equivalent_emails_normalize_alike(self):
+        composed, decomposed = "josé.alvarez@example.test", "josé.alvarez@example.test"
+        self.assertEqual(loaders.normalize_email(composed), loaders.normalize_email(decomposed.upper()))
+        self.assertEqual(loaders.email_hash(composed), loaders.email_hash(decomposed))
+        self.assertNotEqual(loaders.normalize_email(composed), loaders.normalize_email("jose.alvarez@example.test"))
+
+    def test_manifest_paths_outside_the_dataset_are_skipped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "dataset"
+            (root / "evidence").mkdir(parents=True)
+            (root / "evidence" / "ok.log").write_text("", encoding="utf-8")
+            man = root / "evidence_files.csv"
+            man.write_text("file_id,file_path,origin,captured_at\n"
+                           "evidence_01,evidence/ok.log,x,2026-01-01T00:00:00Z\n"
+                           "evidence_02,../outside.log,x,2026-01-01T00:00:00Z\n"
+                           "evidence_03,/etc/passwd,x,2026-01-01T00:00:00Z\n", encoding="utf-8")
+            files = loaders.load_manifest(man, root)
+            self.assertEqual([f.file_id for f in files], ["evidence_01"])
 
 
 class IdentityTests(unittest.TestCase):
@@ -231,7 +251,7 @@ class LLMTests(unittest.TestCase):
             a = self.adapter(tmp, 0.0, on_exceed="abort")
             with self.assertRaises(BudgetExceeded):
                 a.complete(task="t", prompt="x", json_schema={})
-            self.assertEqual(BudgetExceeded.exit_code, 3)
+            self.assertEqual(BudgetExceeded.exit_code, EXIT_BUDGET_EXCEEDED)
 
     def test_total_scope_sums_previous_ledgers(self):
         with tempfile.TemporaryDirectory() as tmp:

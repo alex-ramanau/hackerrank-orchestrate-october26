@@ -12,6 +12,13 @@ DEFAULT_OUTPUT = REPO_ROOT / "output.csv"
 CACHE_DIR = CODE_DIR / "cache"
 PROMPTS_DIR = Path(__file__).resolve().parent / "llm" / "prompts"
 
+# Process exit codes of code/main.py (documented in README.md)
+EXIT_OK = 0
+EXIT_INPUT_MISSING = 1          # a dataset input file or directory does not exist
+EXIT_INVALID_OUTPUT = 2         # output.csv failed contract validation
+EXIT_BUDGET_EXCEEDED = 3        # LLM spend cap reached with GDA_BUDGET_ON_EXCEED=abort
+EXIT_UNVERIFIED_EVIDENCE = 4    # a COMPLETE verdict rests on visual evidence that could not be read
+
 
 @dataclass(frozen=True)
 class DatasetPaths:

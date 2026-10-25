@@ -394,6 +394,90 @@ def recent_leftover_of_earlier_request_is_reported():
     ])}
 
 
+# Shapes from an external QA fixture (rebuilt from its quoted evidence, not its answers): other id schemes,
+# other wordings, other scripts. Same contract, different spelling.
+def tombstone_status_on_profile_rows():
+    """An `account_*` row whose account_status is TOMBSTONE is an ACCOUNT_TOMBSTONE (REDACT), not a profile to
+    delete; it is linked through a user id that does not follow the `user_<n>` scheme."""
+    ds = MiniDataset().user("u_2008", "Hana Kobayashi", "hana.k08@example.test", "+81 90 5555 0108") \
+                      .user("u_2009", "Karim El-Masri", "karim.e09@example.test", "+971 50 555 0109")
+    ds.inventory_sql("2026-05-10T09:00:00Z", ["account_service"], [
+        "INSERT INTO customer_profiles VALUES ('account_2008', 'u_2008', NULL, NULL, NULL, NULL, 'TOMBSTONE', '2026-05-10T08:00:00Z')",
+        f"INSERT INTO customer_profiles VALUES ('account_2009', 'u_2009', 'Karim El-Masri', 'karim.e09@example.test', "
+        f"'+971 50 555 0109', '{sha('karim.e09@example.test')}', 'TOMBSTONE', '2026-05-10T08:00:00Z')",
+    ])
+    ds.request("case_24", "hana.k08@example.test", REQ, REP, AUD)
+    ds.request("case_25", "karim.e09@example.test", REQ, REP, AUD)
+    return ds, {
+        "case_24": ("COMPLETE", [V("account_service", "account_2008", "VERIFY_RECORD_REDACTED", "evidence_01")]),
+        "case_25": ("INCOMPLETE", [
+            F("account_service", "account_2009", "REPORT_EXPOSED_PII", "evidence_01"),
+            R("account_service", "account_2009", "REDACT_RECORD"),
+            V("account_service", "account_2009", "VERIFY_RECORD_REDACTED"),
+        ]),
+    }
+
+
+def unlisted_resource_prefixes():
+    """Resource ids outside the known prefixes take their system from the evidence (origin_system column, the
+    log line's service) and their category from the collection / event name."""
+    ds = base()
+    ds.json_table_sql("2026-05-09T09:00:00Z", [("cust_7040", "customer_data", "customer_profiles",
+                                                {"resource_id": "cust_7040", "user_id": "user_101", "email": EMAIL})])
+    ds.evidence("evidence/logs/notification_events_20260510.log", "2026-05-10T09:00:00Z",
+                f'2026-05-10T07:12:02Z [WARN] [notification_service] email_delivery: resource_id="log_7041" '
+                f'matched_value="{EMAIL}" detector="direct_identifier"\n')
+    ds.request("case_26", EMAIL, REQ, REP, AUD)
+    return ds, {"case_26": ("INCOMPLETE", [
+        F("customer_data", "cust_7040", "REPORT_REMAINING_RECORD", "evidence_01"),
+        F("notification_service", "log_7041", "REPORT_EXPOSED_PII", "evidence_02"),
+        R("customer_data", "cust_7040", "DELETE_RECORD"),
+        R("notification_service", "log_7041", "REDACT_RECORD"),
+        V("customer_data", "cust_7040", "VERIFY_RECORD_ABSENT"),
+        V("notification_service", "log_7041", "VERIFY_RECORD_REDACTED"),
+    ])}
+
+
+def cyrillic_deletion_request():
+    """Without an LLM, a Russian erasure request is still recognised as authorizing deletion."""
+    ds = base()
+    ds.readback_log("2026-05-10T10:00:00Z", [profile_lookup("account_7001", EMAIL), search_lookup("search_7002", EMAIL)])
+    ds.request("case_27", EMAIL, REQ, REP, AUD, text="Здравствуйте, прошу удалить мой аккаунт и все мои персональные данные.")
+    return ds, {"case_27": ("INCOMPLETE", [
+        F("search_service", "search_7002", "REPORT_REMAINING_RECORD", "evidence_01"),
+        R("search_service", "search_7002", "DELETE_RECORD"),
+        V("account_service", "account_7001", "VERIFY_RECORD_ABSENT"),
+        V("search_service", "search_7002", "VERIFY_RECORD_ABSENT"),
+    ])}
+
+
+def other_recreation_and_check_wordings():
+    """"Reindex job recreated ..." is a recreation like "repopulated downstream resource ..."; "check confirmed
+    X can restore ..." reopens a backup that an earlier snapshot showed blocked."""
+    ds = base()
+    ds.readback_log("2026-05-05T10:00:00Z", [profile_lookup("account_7001", EMAIL, ts="2026-05-05T08:00:00Z"),
+                                             search_lookup("search_7002", EMAIL, hit=False, ts="2026-05-05T08:05:00Z")])
+    ds.inventory_sql("2026-05-06T09:00:00Z", ["backup_service"], [
+        f"INSERT INTO backup_restore_entries VALUES ('backup_7004', NULL, '{EMAIL}', 'archive/backup_7004.tar.zst', '0', '2026-05-06T08:00:00Z')"])
+    ds.act("2026-05-08T06:00:00Z", "INDEX_RECORD", "search_reindexer", "search_service", "data_flow_7003", "SUCCESS",
+           "Reindex job recreated search document search_7002 after the account deletion.")
+    ds.act("2026-05-09T06:00:00Z", "CHECK_RESTORE_ACCESS", "deletion_worker", "backup_service", "backup_7004", "SUCCESS",
+           "Restore access check confirmed backup_7004 can restore the deleted account.")
+    ds.request("case_28", EMAIL, REQ, REP, AUD)
+    return ds, {"case_28": ("INCOMPLETE", [
+        F("search_service", "search_7002", "REPORT_REMAINING_RECORD", "activity_01"),
+        F("integration_service", "data_flow_7003", "REPORT_ACTIVE_DATA_FLOW", "activity_01"),
+        F("backup_service", "backup_7004", "REPORT_RESTORE_RISK", "activity_02"),
+        R("integration_service", "data_flow_7003", "DISABLE_DATA_FLOW"),
+        R("backup_service", "backup_7004", "BLOCK_RESTORE"),
+        R("search_service", "search_7002", "DELETE_RECORD"),
+        V("account_service", "account_7001", "VERIFY_RECORD_ABSENT"),
+        V("search_service", "search_7002", "VERIFY_RECORD_ABSENT"),
+        V("integration_service", "data_flow_7003", "VERIFY_DATA_FLOW_DISABLED"),
+        V("backup_service", "backup_7004", "VERIFY_RESTORE_BLOCKED"),
+    ])}
+
+
 SCENARIOS = [
     historical_email_only, near_miss_decoys, evidence_after_audit_is_ignored, korean_non_deletion_request,
     success_claim_is_not_proof, failover_replica_drift, connector_recreates_deleted_entry, restorable_backup,
@@ -401,5 +485,6 @@ SCENARIOS = [
     analytics_profile_vs_marketing_contact, complete_cites_latest_evidence, identifiers_joined_across_trace_lines,
     unknown_identity_uses_bare_email, retained_record_from_late_export, late_export_never_supports_complete,
     unknown_email_gets_no_timing_link, earlier_request_owns_its_leftovers,
-    recent_leftover_of_earlier_request_is_reported,
+    recent_leftover_of_earlier_request_is_reported, tombstone_status_on_profile_rows, unlisted_resource_prefixes,
+    cyrillic_deletion_request, other_recreation_and_check_wordings,
 ]

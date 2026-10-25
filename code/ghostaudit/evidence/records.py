@@ -52,6 +52,26 @@ REFERENCE_FIELDS = {
     "lookup_key", "match_key", "subject_key", "subject_ref", "scan_key", "owner_key", "correlation_key",
     "subject_reference", "customer_reference", "user_id", "lookup_value", "query", "subject",
 }
+# For resource ids outside PREFIX_SYSTEM: words in the table / collection / log event -> data category (first match)
+COLLECTION_CATEGORY = [
+    (("tombstone",), "ACCOUNT_TOMBSTONE"),
+    (("email_delivery", "delivery_log", "notification"), "EMAIL_DELIVERY_LOG"),
+    (("security_audit", "audit_record", "audit_event"), "SECURITY_AUDIT_LOG"),
+    (("legal",), "LEGAL_HOLD_RECORD"),
+    (("backup", "archive"), "BACKUP_ARCHIVE"),
+    (("attachment",), "SUPPORT_ATTACHMENT"),
+    (("support", "ticket", "conversation"), "SUPPORT_MESSAGE"),
+    (("search", "index"), "SEARCH_INDEX_ENTRY"),
+    (("marketing", "newsletter"), "MARKETING_PROFILE"),
+    (("telemetry",), "PRODUCT_TELEMETRY"),
+    (("analytics",), "ANALYTICS_PROFILE"),
+    (("export",), "USER_EXPORT"),
+    (("cache",), "CACHE_ENTRY"),
+    (("profile", "account", "customer"), "USER_PROFILE"),
+]
+# Reference fields whose value is the stable internal user id, whatever its naming scheme.
+USER_REFERENCE_FIELDS = {"user_id", "customer_reference", "subject_reference", "subject_ref"}
+ID_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9]*[_-][A-Za-z0-9_-]+")
 TEXT_FIELDS = {"message_text", "message_excerpt", "message", "note", "details"}
 
 
@@ -131,6 +151,9 @@ def extract_identifiers(fields: dict) -> tuple[set, set, set]:
             continue
         if key in REFERENCE_FIELDS:
             n = classify_value(sval)
+            if n is None and key in USER_REFERENCE_FIELDS and ID_TOKEN_RE.fullmatch(sval.strip()) \
+                    and not RESOURCE_RE.fullmatch(sval.strip()):
+                n = norm_identifier("user_id", sval)  # any stable internal id, not only "user_<n>"
             if n:
                 ids.add(n)
             for rid in RESOURCE_RE.findall(sval):
@@ -163,6 +186,8 @@ def category_hint(resource_id: str, f: dict, collection: str) -> str | None:
         if rt == "DATA_FLOW":
             return None
         return rt
+    if str(f.get("account_status") or "").strip().upper() == "TOMBSTONE":
+        return "ACCOUNT_TOMBSTONE"
     col = (collection or "").lower()
     ev = str(f.get("event") or "").lower()
     if resource_id.startswith("support_"):
@@ -197,6 +222,12 @@ def category_hint(resource_id: str, f: dict, collection: str) -> str | None:
         return "CACHE_ENTRY"
     if resource_id.startswith("email_delivery_"):
         return "EMAIL_DELIVERY_LOG"
+    if system_for(resource_id) == "unknown":
+        # an id outside the known prefixes: the table / collection / log event names what the record is
+        where = f"{col} {ev}"
+        for words, cat in COLLECTION_CATEGORY:
+            if any(w in where for w in words):
+                return cat
     return None
 
 
@@ -269,7 +300,7 @@ def classify_state(resource_id: str, system: str, f: dict, direct: set) -> Kind 
             return Kind.PRESENT
         return Kind.PRESENT if attributable else Kind.ANONYMIZED
 
-    if system in {"identity_service"}:
+    if system in {"identity_service"} or str(f.get("account_status") or "").strip().upper() == "TOMBSTONE":
         return Kind.PRESENT if exposed else Kind.REDACTED
 
     if system == "support_platform":

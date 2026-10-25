@@ -9,7 +9,15 @@ from ..loaders import EMAIL_RE
 from ..models import Activity, Kind, Observation
 from .records import RESOURCE_RE, USER_RE, system_for
 
-REPOPULATED_RE = re.compile(r"repopulated downstream resource (\S+?)\.?$")
+ID = r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*_\d+"
+# "<job> repopulated downstream resource X." and other wordings of a copy being written back
+RECREATED_RE = re.compile(r"\b(?:repopulated|re-?populated|recreated|re-created|re-?indexed|restored|rehydrated|"
+                          r"re-?synced)\b(?:\s+(?:the\s+)?(?:downstream|deleted|search|customer))*"
+                          r"(?:\s+(?:resource|document|record|entry|profile|copy))?\s+(" + ID + r")\b", re.I)
+FLOW_ACTIVE_RE = re.compile(r"\b(?:remains|still|is) (?:enabled|active|running|scheduled)\b", re.I)
+RESTORE_OPEN_RE = re.compile(r"\bcan (?:still )?(?:be )?restored?\b|\brestore (?:access )?(?:remains|is still) "
+                             r"(?:possible|allowed|open)\b", re.I)
+RECREATING_EVENTS = {"SYNC_RECORD", "RESTORE_BACKUP", "INDEX_RECORD", "REINDEX_RECORD", "REFRESH_CACHE"}
 
 
 def _obs(a: Activity, rid: str, kind: Kind, ids=frozenset(), attrs=None) -> Observation:
@@ -38,13 +46,15 @@ def extract(activities: list[Activity]) -> list[Observation]:
     for a in activities:
         d = a.details
         rid = a.resource_id
-        if a.event_type == "CHECK_DATA_FLOW" and "remains enabled" in d:
+        restore_event = "RESTORE" in a.event_type or d.lower().startswith("restore")
+        if a.event_type.startswith("CHECK") and not restore_event and FLOW_ACTIVE_RE.search(d):
             out.append(_obs(a, rid, Kind.FLOW_ACTIVE))
-        elif a.event_type == "CHECK_RESTORE_ACCESS" and "can still be restored" in d:
+        elif a.event_type.startswith("CHECK") and restore_event and RESTORE_OPEN_RE.search(d):
             out.append(_obs(a, rid, Kind.RESTORE_ALLOWED))
-        elif a.event_type in {"SYNC_RECORD", "RESTORE_BACKUP"} and (m := REPOPULATED_RE.search(d)):
+        elif a.event_type in RECREATING_EVENTS and a.reported_result != "FAILED" and (m := RECREATED_RE.search(d)) \
+                and m.group(1) != rid:
             downstream = m.group(1)
-            src_kind = Kind.FLOW_ACTIVE if a.event_type == "SYNC_RECORD" else Kind.RESTORE_ALLOWED
+            src_kind = Kind.RESTORE_ALLOWED if restore_event else Kind.FLOW_ACTIVE
             out.append(_obs(a, rid, src_kind, attrs={"_refs": downstream, "_recreates": downstream}))
             out.append(_obs(a, downstream, Kind.RECREATED, attrs={"_refs": rid, "_recreated_by": rid}))
         elif a.event_type == "LINK_RESOURCE_IDENTITY":
