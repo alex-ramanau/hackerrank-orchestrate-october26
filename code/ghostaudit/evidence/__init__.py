@@ -4,8 +4,9 @@ from __future__ import annotations
 import logging
 import re
 from collections import defaultdict
+from dataclasses import replace
 
-from ..models import Activity, EvidenceFile
+from ..models import Activity, EvidenceFile, Kind
 from . import activity, json_records, logs, multimodal, sql_snapshots, text_records
 from .records import system_for, to_observation
 from .store import Coverage, ObservationStore
@@ -18,6 +19,9 @@ EXTRACTORS = {
     ".txt": text_records.extract,
     ".log": logs.extract,
 }
+
+# states an OCR-only record may assert (anything else becomes a plain link)
+OCR_KINDS = {Kind.PRESENT, Kind.FLOW_ACTIVE, Kind.RESTORE_ALLOWED, Kind.RETAINED, Kind.LINK}
 
 
 FILE_ALIAS_RE = re.compile(r"\b([a-z]+(?:_[a-z]+)*_\d+) \(([^()\s]+\.[A-Za-z0-9]{2,4})\)")
@@ -44,9 +48,11 @@ def build_observation_store(manifest: list[EvidenceFile], activities: list[Activ
         if suffix in EXTRACTORS:
             records, cov = EXTRACTORS[suffix](ef)
         elif suffix in multimodal.VISUAL_SUFFIXES:
-            records, cov = multimodal.extract(ef, llm)
-            if records is None:
+            records, cov, complete = multimodal.extract(ef, llm, aliases.keys())
+            if not complete:
+                # unread, or read by OCR only: the file may hold more than was seen, so no COMPLETE rests on it
                 store.unreadable.append((ef.file_id, ef.captured_at))
+            if records is None:
                 store.report[ef.file_id] = {"path": str(ef.path.name), "error": "visual extraction unavailable"}
                 continue
         else:
@@ -63,6 +69,9 @@ def build_observation_store(manifest: list[EvidenceFile], activities: list[Activ
             obs = to_observation(raw)
             if obs is None:
                 continue
+            if raw.source_format == "ocr" and obs.kind not in OCR_KINDS:
+                # OCR can miss words: an OCR record shows presence or a link, never absence or a clean state
+                obs = replace(obs, kind=Kind.LINK)
             store.add(obs)
             n += 1
             present_by_system[(obs.system_id, obs.location)].add(obs.resource_id)

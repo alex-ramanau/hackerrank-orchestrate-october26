@@ -29,7 +29,7 @@ class ClaudeCLIBackend:
             cmd += ["--allowedTools", ""]
         return cmd
 
-    def call(self, prompt: str, images: list[Path], model: str, max_tokens: int) -> BackendResponse:
+    def call(self, prompt: str, images: list[Path], model: str, max_tokens: int, json_mode: bool = False) -> BackendResponse:
         if images:
             listing = "\n".join(f"- {Path(i).resolve()}" for i in images)
             prompt = f"{prompt}\n\nUse the Read tool to open these files:\n{listing}\n"

@@ -36,7 +36,7 @@ class AnthropicBackend:
             client = anthropic.Anthropic()
         self.client = client
 
-    def call(self, prompt: str, images: list[Path], model: str, max_tokens: int) -> BackendResponse:
+    def call(self, prompt: str, images: list[Path], model: str, max_tokens: int, json_mode: bool = False) -> BackendResponse:
         msg = self.client.messages.create(
             model=model,
             max_tokens=max_tokens,

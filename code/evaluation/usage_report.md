@@ -5,7 +5,7 @@ Final full-dataset run: `python3 code/main.py` (backend `replay`) over the 518 r
 - Requests processed: **518**
 - Cached LLM results used by the final run: **34** unique results, served by 49 cache lookups (the visual prefetch and the extraction pass look the same result up twice; the run log's "cache hits" counts lookups). Live calls during the final run: 0
 - Replay output byte-identical to the submitted `output.csv`: **True**
-- Spending cap (`GDA_BUDGET_USD`): $3.00; live spend recorded in this checkout's development ledgers (`code/cache/ledger/`, all trial runs included): $1.44
+- Spending cap (`GDA_BUDGET_USD`): $3.00; live spend recorded in this checkout's development ledgers (`code/cache/ledger/`, all trial runs included): $1.59
 
 | Provider | Model | Tasks | Calls | Input tokens | Output tokens | Total tokens | Cost (USD) |
 |---|---|---|---|---|---|---|---|

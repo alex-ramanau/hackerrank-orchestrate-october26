@@ -75,3 +75,18 @@ def budget_usd() -> float:
         return float(env("GDA_BUDGET_USD", "3.00"))
     except ValueError:
         return 3.0
+
+
+def _flag(name: str, default: bool) -> bool:
+    v = env(name, "1" if default else "0").strip().lower()
+    return v not in {"0", "false", "no", "off", ""}
+
+
+def vision_grounding() -> bool:
+    """GDA_VISION_GROUNDING (default on): drop vision-model records that the OCR text of the image does not show."""
+    return _flag("GDA_VISION_GROUNDING", True)
+
+
+def vision_ocr_fallback() -> bool:
+    """GDA_VISION_OCR_FALLBACK (default on): read an image by OCR when no vision-model result exists."""
+    return _flag("GDA_VISION_OCR_FALLBACK", True)

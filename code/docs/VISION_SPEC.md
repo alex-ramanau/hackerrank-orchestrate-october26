@@ -1,6 +1,6 @@
 # Vision evidence: spec and model options (WP-7)
 
-Status: **decided** (see §9), 2026-10-24. Deadline 2026-10-25 12:30 UTC. Scope: the PNG/PDF evidence path and
+Status: **implemented** (steps 1–3, see §10), 2026-10-25. Decisions in §9. Deadline 2026-10-25 12:30 UTC. Scope: the PNG/PDF evidence path and
 the edge cases `case_e14` and `case_e15` (`code/evaluation/edge_dataset/`).
 
 ## 1. Problem
@@ -201,3 +201,31 @@ warm that one image with Sonnet (~$0.07), or try a larger local VLM if host VRAM
   file-name pass (`extract_files`) never runs and the file is not linked to `object_8151`. The case keeps its
   hand-written expected answer and is labelled `known-limitation` (not gated). It would pass with a Sonnet
   transcription (~$0.07) or a stronger local VLM. Steps 2–3 (OCR grounding, OCR fallback) are future work.
+
+## 10. Implementation (2026-10-25)
+
+Owner decisions: OCR engine **Tesseract** (apt), Sonnet warm-up for e15 approved, both guards **switchable and on
+by default**, `ollama` a full `GDA_LLM_BACKEND` provider.
+
+| Step | Implemented as | Switch |
+|---|---|---|
+| 1. Coverage | e15's storage-browser screenshot transcribed by Sonnet through `claude_cli`: `extract_visual` (no ids) + `extract_files` (2 files). **$0.147** (two calls, more than the $0.07 estimate; WP total $0.147 ≤ $0.30). Cache append-only (43 → 45 lines). e15 relabelled `needs-vision` and passes. | – |
+| 2. Grounding guard | `evidence/ocr.py` `Grounding.check`: each vision record's id (or listed file name) must occur in the OCR text of its image; emails/phones that do not occur are removed from the record. Matching is tolerant of OCR slips: NFKC + casefold, Cyrillic look-alikes mapped to Latin (`Баскир_9288` → `backup_9288`), separators ignored, ≤1 edit (<12 chars) or ≤2 edits, phones by digit run. No OCR text → nothing dropped. Invariant `visual_grounding` in `check_all.py` (11/11). | `GDA_VISION_GROUNDING` (default 1) |
+| 3. OCR fallback | No vision result (cache miss, offline), or every vision record ungrounded with no listing pass: one record per OCR line with a known-prefix id (≥3 digits) or a file name the data catalog links (fuzzy), with the line's email/phone/status. `source_format="ocr"`; such records can only be PRESENT / ACTIVE / RETAINED / LINK, and the file still counts as unread, so no COMPLETE rests on it (exit 4 stays). | `GDA_VISION_OCR_FALLBACK` (default 1) |
+
+OCR text comes from `pdftotext` (PDF text layer), else `pdftoppm` + `tesseract -l eng+rus`. It is cached by file
+sha256 in `code/cache/ocr_cache.jsonl` (18 files), so replay runs (and the judge's) reproduce the guard without the
+tools; a unit test fails if an image's bytes drift from its cached OCR.
+
+Results:
+- Real evidence: **34/34** Sonnet records grounded (first pass 33/34; the 3 misses were OCR slips, fixed by the
+  tolerant matching, not VLM errors). `output.csv` byte-identical, with either switch on or off.
+- Edge: the guard drops Qwen's invented `export_001/002` on e15; with only the Qwen transcription, the OCR fallback
+  still links `account_export_15.zip` → `object_8151` and e15 passes at $0. Gate failures 0.
+- Offline (no LLM): the OCR fallback recovers 3 of the 8 findings that otherwise flip to COMPLETE; the other 5 stay
+  flagged by exit 4.
+- `ollama` provider: defaults `qwen3:8b` (intent) and `qwen2.5vl:7b` (vision), JSON mode, `think: false`, PDFs as
+  page images via `pdftoppm`. Live check against the host: intent 3/3 (incl. a Russian "do not delete"), one PNG
+  and one PDF read in 15 s / 31 s, $0. The guard dropped Qwen's invented `account_18` on the PDF; Qwen also reported
+  `user_11` instead of `account_5762` on the admin console. Same conclusion as §8: fine for intent and as a free
+  second opinion, not as the primary extractor.

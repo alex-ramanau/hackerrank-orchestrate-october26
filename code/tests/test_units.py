@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import tempfile
 import unittest
+from unittest import mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -91,9 +93,50 @@ class LoaderTests(unittest.TestCase):
 
     def test_unreadable_visual_evidence_is_tracked(self):
         man = [e for e in loaders.load_manifest(D / "evidence_files.csv", D) if e.path.suffix == ".png"][:2]
-        st = build_observation_store(man, [], LLMAdapter(backend="offline"))
+        with mock.patch.dict(os.environ, {"GDA_VISION_OCR_FALLBACK": "0"}):
+            st = build_observation_store(man, [], LLMAdapter(backend="offline"))
         self.assertEqual(sorted(f for f, _ in st.unreadable), sorted(e.file_id for e in man))
         self.assertEqual(st.observations, [])
+
+    def test_ocr_fallback_reports_findings_only(self):
+        """Without a vision result the committed OCR text is read, but the file stays 'unreadable' (no COMPLETE may
+        rest on it) and no OCR record can assert an absent or clean state."""
+        man = [e for e in loaders.load_manifest(D / "evidence_files.csv", D) if e.path.suffix == ".png"][:2]
+        with mock.patch.dict(os.environ, {"GDA_VISION_OCR_FALLBACK": "1"}):
+            st = build_observation_store(man, [], LLMAdapter(backend="offline"))
+        self.assertEqual(sorted(f for f, _ in st.unreadable), sorted(e.file_id for e in man))
+        self.assertTrue(st.observations)
+        self.assertTrue({o.kind for o in st.observations} <= {Kind.PRESENT, Kind.FLOW_ACTIVE, Kind.RESTORE_ALLOWED,
+                                                             Kind.RETAINED, Kind.LINK})
+
+    def test_every_visual_file_has_committed_ocr_text(self):
+        """The OCR cache is keyed by file sha256: a re-rendered edge PNG (e.g. after a Pillow upgrade) or a changed
+        dataset image would silently lose its OCR text and its LLM transcription."""
+        import hashlib
+        from ghostaudit.evidence import ocr
+        edge = Path(__file__).resolve().parents[1] / "evaluation" / "edge_dataset" / "main"
+        for root in (D, edge):
+            for ef in loaders.load_manifest(root / "evidence_files.csv", root):
+                if ef.path.suffix.lower() in {".png", ".jpg", ".jpeg", ".pdf"}:
+                    self.assertIsNotNone(ocr.cache().get(hashlib.sha256(ef.path.read_bytes()).hexdigest()), ef.path.name)
+
+    def test_grounding_drops_ids_the_image_does_not_show(self):
+        from ghostaudit.evidence import ocr
+        from ghostaudit.evidence.records import RawRecord
+        ef = loaders.load_manifest(D / "evidence_files.csv", D)[0]
+        text = ("1] search 1874 - g.silva76,jr@gmail.com\n2] Баскир_9288 miller logistics@company.com\n"
+                "3] search_428 Gabriel Silva")
+        recs = [RawRecord(ef.file_id, ef.captured_at, rid, dict(f)) for rid, f in (
+            ("search_1874", {"email": "g.silva76.jr@gmail.com"}),           # OCR lost "_" and read "." as ","
+            ("backup_9288", {"email": "miller.logistics@company.com"}),     # Cyrillic look-alikes, lost "."
+            ("export_001", {}),                                              # not in the image: invented
+            ("search_428", {"email": "someone.else@example.com"}))]          # id shown, email not shown
+        g = ocr.Grounding()
+        kept = g.check(ef, recs, text)
+        self.assertEqual([r.resource_id for r in kept], ["search_1874", "backup_9288", "search_428"])
+        self.assertEqual(g.files[ef.file_id]["dropped"], ["export_001"])
+        self.assertEqual(g.files[ef.file_id]["fields_removed"], ["search_428.email"])
+        self.assertEqual(g.check(ef, recs[:1], None), recs[:1])  # no OCR text: nothing is dropped
 
     def test_output_rows_follow_the_request_file_order(self):
         ids = [c.case_id for c in loaders.load_cases(D / "deletion_requests.csv")]
@@ -229,7 +272,7 @@ class FakeBackend:
     def __init__(self):
         self.calls = 0
 
-    def call(self, prompt, images, model, max_tokens):
+    def call(self, prompt, images, model, max_tokens, json_mode=False):
         self.calls += 1
         return BackendResponse('{"ok": true}', 1000, 100, model, self.provider, cost_usd=0.01)
 

@@ -17,8 +17,8 @@ Requirements: Python ≥ 3.10, standard library only (SQLite ships with Python).
 python3 code/main.py                    # 518 requests -> ./output.csv   (~12 s)
 python3 code/main.py --cases sample     # 32 public samples -> ./sample_predictions.csv
 python3 code/evaluation/main.py         # metrics + regenerate both reports (~1.5 min)
-python3 code/evaluation/check_all.py    # quality gate: tests, sample regression, invariants (~40 s)
-python3 -m unittest discover -s code/tests -t code   # 29 unit + 24 end-to-end scenario tests
+python3 code/evaluation/check_all.py    # quality gate: tests, sample regression, invariants, 11 checks (~40 s)
+python3 -m unittest discover -s code/tests -t code   # 32 unit + 24 end-to-end scenario tests
 python3 code/package.py                 # build code.zip (README.md + code/ + evaluation/ report copies, no dataset)
 ```
 
@@ -30,14 +30,16 @@ so a clean clone reproduces `output.csv` byte-for-byte with no network access an
 | `GDA_LLM_BACKEND` | What it does | Needs |
 |---|---|---|
 | `replay` (default) | committed cache only; on a miss, falls back to the deterministic heuristic | nothing |
-| `offline` | ignores the cache; heuristic intent, no visual extraction | nothing |
+| `offline` | ignores the LLM cache; heuristic intent; screenshots/PDFs only through the OCR fallback (findings only) | nothing |
 | `claude_cli` | `claude -p --output-format json` with the logged-in Claude subscription (used for development and for producing the cache) | `claude` CLI logged in |
 | `anthropic` | Anthropic Messages API through the official SDK | `pip install anthropic`, `ANTHROPIC_API_KEY` |
 | `openai` | OpenAI Chat Completions through the official SDK | `pip install openai`, `OPENAI_API_KEY`, `GDA_PRICE_OVERRIDE_<ALIAS>="in,out"` |
-| `ollama` | Local models through the Ollama HTTP API (vision: PNG/JPG only; results cached under their own key, Sonnet entries win in replay). Optional, development only | Ollama server (`OLLAMA_HOST`, default `http://127.0.0.1:11434`), a vision model such as `qwen2.5vl:7b` in `GDA_MODEL_VISION` |
+| `ollama` | Local (or `:cloud`) models through the Ollama HTTP API, $0 for local models. Defaults: `qwen3:8b` for intent, `qwen2.5vl:7b` for vision (override with `GDA_MODEL_FAST` / `GDA_MODEL_VISION`). JSON mode, thinking off, temperature 0, seed 7. PDFs are sent as page images rendered by `pdftoppm`. Results are cached under their own `ollama:<model>` key; in replay the Sonnet entries win | Ollama server (`OLLAMA_HOST`, default `http://127.0.0.1:11434`) with the models pulled; `poppler-utils` for PDFs |
 
 Other settings: `GDA_MODEL_FAST` (default `claude-haiku-5-5`, intent), `GDA_MODEL_VISION` (default `claude-sonnet-5-5`,
-PNG/PDF evidence), `GDA_BUDGET_USD` (default `3.00`, `0` = cache only), `GDA_BUDGET_SCOPE` (`total` | `run`),
+PNG/PDF evidence), `GDA_VISION_GROUNDING` (default `1`: drop vision-model records that the image's OCR text does not
+show), `GDA_VISION_OCR_FALLBACK` (default `1`: read a screenshot/PDF by OCR when no vision result exists; such records
+can only report what is still there, never prove absence), `GDA_BUDGET_USD` (default `3.00`, `0` = cache only), `GDA_BUDGET_SCOPE` (`total` | `run`),
 `GDA_BUDGET_ON_EXCEED` (`fallback` | `abort`, exit code 3), `GDA_STRICT_EVIDENCE` (default `1`: exit code 4, after writing every row, when a
 screenshot/PDF captured during a request could not be read and that request's COMPLETE verdict could depend on it;
 `0` accepts such verdicts). Secrets are read from the environment only; keep them
@@ -60,7 +62,7 @@ dataset/ ─► loaders ─► IdentityResolver (current + historical email/phon
              ├─► evidence extractors ─► ObservationStore  (facts, never judgements)
              │     SQL snapshots (typed tables + JSON-in-table replicas, via sqlite3) · JSON bundles / service
              │     exports / ledgers · handover TXT · 5 log layouts joined by trace id · activity stream ·
-             │     PNG/PDF via a cached vision-LLM transcription
+             │     PNG/PDF via a cached vision-LLM transcription, checked against local OCR (cached)
              │
              ├─► IntentClassifier (LLM, batched + cached; multilingual heuristic fallback)
              │
@@ -83,6 +85,13 @@ dataset/ ─► loaders ─► IdentityResolver (current + historical email/phon
   identifier-linked (`code/cache/workflow_model.json`) and used to attach un-linked steps and to assign each
   profile deletion to exactly one request by elimination — only with information available at the case's `audit_at`.
   Timing is never enough on its own: a request whose email resolves to no known person gets no workflow link.
+- **Vision output is grounded.** Every record the vision model returns must be visible in a local OCR reading of the
+  same image (Tesseract for screenshots, `pdftotext`/`pdftoppm` for PDFs), tolerant of OCR slips (`_` read as a space,
+  Cyrillic look-alikes, one or two misread characters). An ID the OCR text doesn't show is dropped; an email or phone it
+  doesn't show is removed from the record. OCR text is cached by file sha256 in `code/cache/ocr_cache.jsonl`, so the
+  check is reproducible without Tesseract installed; with no OCR text nothing is dropped. On the 15 real images 34/34
+  Sonnet records are grounded; on the edge screenshots it drops the IDs a local VLM invented (`export_001/002`).
+  Optional tools: `sudo apt install tesseract-ocr tesseract-ocr-rus poppler-utils`.
 - **Unread evidence is never silent.** If a screenshot/PDF cannot be transcribed (empty cache, no vision backend),
   every COMPLETE verdict of a request during which it was captured is marked `unverified_evidence` in its trace,
   counted on stderr, and the run exits 4 (opt out with `GDA_STRICT_EVIDENCE=0`).
@@ -100,7 +109,8 @@ dataset/ ─► loaders ─► IdentityResolver (current + historical email/phon
 | Sample step F1 · exact sequence | 97.4% · 84.4% (holdout 100%); the rest are 2 audit records absent from every file and 3 hand-written accounts |
 | Intent: own 62-text multilingual set + 32 samples (LLM) | 100% accuracy, NON_DELETE recall 100% |
 | Custom end-to-end scenarios | 24 / 24 |
-| Invariants on the 518-case run | contract, citations ≤ audit_at, policy sanity, determinism, identifier invariance, time travel: all pass |
+| Vision records grounded by local OCR (15 real + 3 edge images) | 38 / 38 |
+| Invariants on the 518-case run | contract, citations ≤ audit_at, policy sanity, determinism, identifier invariance, time travel, visual grounding: all pass |
 | LLM cost to build the cache used by the final run | ≈ $1.37 (34 calls via `claude -p`; ≈ $0.20 estimated via the direct API), $0 marginal for replay runs |
 
 ## Repository layout

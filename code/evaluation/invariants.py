@@ -181,6 +181,27 @@ def identifier_invariance(dataset: Path, requests: Path, reference: Path) -> lis
         return [f"{cid}: row changes with an upper-cased email" for cid in a if a[cid] != b.get(cid)]
 
 
+EDGE_DATASET = Path(__file__).resolve().parent / "edge_dataset" / "main"
+
+
+def visual_grounding(datasets: list[Path]) -> tuple[list[str], int]:
+    """VISION_SPEC step 2: every vision-model record (replay cache) must be shown by the OCR text of its image,
+    and every visual file must have OCR text. Returns (failures, records checked)."""
+    from ghostaudit.evidence import build_observation_store, ocr
+    from ghostaudit.llm.adapter import LLMAdapter
+
+    fails: list[str] = []
+    checked = 0
+    for root in datasets:
+        ocr.GROUNDING.files.clear()
+        build_observation_store(loaders.load_manifest(root / "evidence_files.csv", root), [], LLMAdapter(backend="replay"))
+        s = ocr.GROUNDING.summary()
+        checked += s["records"]
+        fails += [f"{root.name}/{fid}: no OCR text" for fid, st in sorted(ocr.GROUNDING.files.items()) if not st["ocr"]]
+        fails += [f"{root.name}/{x}: not visible in OCR text" for x in s["dropped"] + s["fields_removed"]]
+    return fails, checked
+
+
 def run_all(output: Path, dataset: Path, requests: Path, full: bool = False) -> dict:
     res = {
         "contract": contract(output, requests),
@@ -192,6 +213,9 @@ def run_all(output: Path, dataset: Path, requests: Path, full: bool = False) -> 
     tt, checked = time_travel(output, dataset, requests, None if full else 6)
     res["time_travel"] = tt
     res["time_travel_cases_checked"] = checked
+    vg, n = visual_grounding([dataset, EDGE_DATASET] if EDGE_DATASET.exists() else [dataset])
+    res["visual_grounding"] = vg
+    res["visual_grounding_records_checked"] = n
     return res
 
 

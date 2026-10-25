@@ -1,4 +1,4 @@
-"""LLMAdapter: cache -> budget -> backend -> ledger. Backends: claude_cli | anthropic | openai | replay | offline.
+"""LLMAdapter: cache -> budget -> backend -> ledger. Backends: claude_cli | anthropic | openai | ollama | replay | offline.
 
 `replay` and `offline` never touch the network: replay serves the committed cache, offline ignores it so
 every caller uses its deterministic heuristic.
@@ -24,6 +24,10 @@ log = logging.getLogger(__name__)
 MODEL_ALIASES = {
     "fast": ("GDA_MODEL_FAST", "claude-haiku-5-5"),
     "vision": ("GDA_MODEL_VISION", "claude-sonnet-5-5"),
+}
+# per-backend defaults when GDA_MODEL_FAST / GDA_MODEL_VISION are not set (Claude ids mean nothing to Ollama)
+BACKEND_DEFAULT_MODELS = {
+    "ollama": {"fast": "qwen3:8b", "vision": "qwen2.5vl:7b"},
 }
 # backends whose results are cached under their own key (the original keys belong to the Anthropic models)
 VARIANT_BACKENDS = {"ollama", "openai"}
@@ -74,11 +78,11 @@ class LLMAdapter:
                 self._backend_error = str(exc)
                 log.warning("LLM backend %s unavailable (%s): using cache/offline only", self.backend_name, exc)
 
-    @staticmethod
-    def resolve_model(task: str, model: str | None) -> tuple[str, str]:
+    def resolve_model(self, task: str, model: str | None) -> tuple[str, str]:
         alias = model or TASK_ALIAS.get(task, "fast")
         if alias in MODEL_ALIASES:
             env_name, default = MODEL_ALIASES[alias]
+            default = BACKEND_DEFAULT_MODELS.get(self.backend_name, {}).get(alias, default)
             return alias, os.environ.get(env_name, default)
         return alias, alias
 
@@ -120,7 +124,7 @@ class LLMAdapter:
                 log.warning("LLM budget exhausted: %s falls back", task)
                 return None
             try:
-                resp = self._backend.call(prompt, images, model_id, max_tokens)
+                resp = self._backend.call(prompt, images, model_id, max_tokens, json_mode=json_schema is not None)
             except Exception as exc:  # network / CLI failure -> fallback, never crash the run
                 log.warning("LLM call failed for %s: %s", task, exc)
                 self.budget.release(estimate)
