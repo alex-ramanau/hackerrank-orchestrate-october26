@@ -24,9 +24,10 @@ OMAR = "omar.h@example.org"
 INVOICE = b"%PDF-1.4 stand-in for an invoice the vision model never read"
 
 
-def run(ocr_text: str | None) -> tuple[int, dict]:
-    """Two COMPLETE requests in the same window and one unread PDF captured inside it. Returns (exit code,
-    {case_id: unverified_evidence})."""
+def run(ocr_text: str | None, listed: str = "evidence/documents/invoice_for_client.pdf",
+        present: bool = True) -> tuple[int, dict]:
+    """Two COMPLETE requests in the same window and one unread file captured inside it (or, with present=False,
+    listed in the manifest but missing). Returns (exit code, {case_id: unverified_evidence})."""
     ds = base().user("user_103", "Omar Haddad", OMAR, "+971 50 100 2000")
     ds.readback_log("2026-05-10T10:00:00Z", [profile_lookup("account_7001", EMAIL),
                                              profile_lookup("account_7301", OMAR, ts="2026-05-10T08:01:00Z")])
@@ -35,11 +36,12 @@ def run(ocr_text: str | None) -> tuple[int, dict]:
     with tempfile.TemporaryDirectory(prefix="gda_unread_") as tmp:
         work = Path(tmp)
         root = ds.write(work / "dataset")
-        pdf = root / "evidence" / "documents" / "invoice_for_client.pdf"
-        pdf.parent.mkdir(parents=True, exist_ok=True)
-        pdf.write_bytes(INVOICE)
+        pdf = root / listed
+        if present:
+            pdf.parent.mkdir(parents=True, exist_ok=True)
+            pdf.write_bytes(INVOICE)
         with open(root / "evidence_files.csv", "a", encoding="utf-8") as fh:
-            fh.write("evidence_02,evidence/documents/invoice_for_client.pdf,billing_service,2026-05-08T09:00:00Z\n")
+            fh.write(f"evidence_02,{listed},billing_service,2026-05-08T09:00:00Z\n")
         cache = work / "ocr_cache.jsonl"
         if ocr_text is not None:
             cache.write_text(json.dumps({"sha256": hashlib.sha256(INVOICE).hexdigest(), "file": pdf.name,
@@ -67,6 +69,24 @@ class UnreadEvidenceScopeTests(unittest.TestCase):
     def test_without_ocr_text_every_request_in_the_window_is_flagged(self):
         """Contents unknown: any COMPLETE request in the window may rest on it (the conservative default)."""
         code, flags = run(None)
+        self.assertEqual(flags, {"case_30": ["evidence_02"], "case_31": ["evidence_02"]})
+        self.assertEqual(code, 4)
+
+
+class MissingEvidenceTests(unittest.TestCase):
+    """Finding (2026-10-25, owner's removal test): a file listed in evidence_files.csv but missing on disk was
+    skipped without a trace, so a request whose only finding was in it turned COMPLETE with exit 0. Its contents
+    are unknown, exactly like an unreadable screenshot."""
+
+    @unittest.expectedFailure
+    def test_missing_listed_screenshot_counts_as_unread(self):
+        code, flags = run(None, "evidence/images/connector_console_20260508.png", present=False)
+        self.assertEqual(flags, {"case_30": ["evidence_02"], "case_31": ["evidence_02"]})
+        self.assertEqual(code, 4)
+
+    @unittest.expectedFailure
+    def test_missing_listed_snapshot_counts_as_unread(self):
+        code, flags = run(None, "evidence/databases/customer_data_inventory_20260508.sql", present=False)
         self.assertEqual(flags, {"case_30": ["evidence_02"], "case_31": ["evidence_02"]})
         self.assertEqual(code, 4)
 
