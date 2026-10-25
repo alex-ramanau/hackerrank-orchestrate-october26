@@ -18,7 +18,7 @@ python3 code/main.py                    # 518 requests -> ./output.csv   (~12 s)
 python3 code/main.py --cases sample     # 32 public samples -> ./sample_predictions.csv
 python3 code/evaluation/main.py         # metrics + regenerate both reports (~1.5 min)
 python3 code/evaluation/check_all.py    # quality gate: tests, sample regression, invariants (~40 s)
-python3 -m unittest discover -s code/tests -t code   # 28 unit + 24 end-to-end scenario tests
+python3 -m unittest discover -s code/tests -t code   # 29 unit + 24 end-to-end scenario tests
 python3 code/package.py                 # build code.zip (README.md + code/ + evaluation/ report copies, no dataset)
 ```
 
@@ -49,8 +49,8 @@ decision trace per case: identifiers, owned resources, how each was linked, the 
 
 Exit codes (named constants `EXIT_*` in `code/ghostaudit/config.py`): `0` ok · `1` dataset input missing (one-line message naming the files) · `2` output failed contract
 validation · `3` budget exceeded with `GDA_BUDGET_ON_EXCEED=abort` · `4` a COMPLETE verdict rests on unread
-visual evidence (default; `GDA_STRICT_EVIDENCE=0` to accept). Rows are sorted by `case_id` as a string (`case_100` before `case_99`), which is what any
-sort routine produces; graders that join on `case_id` are unaffected either way. CSV inputs saved with a UTF-8 byte-order mark (spreadsheet exports) are accepted. Emails and names are matched after Unicode NFKC normalisation and casefolding, and manifest paths that point outside `--dataset-dir` are skipped.
+visual evidence (default; `GDA_STRICT_EVIDENCE=0` to accept). Rows are sorted by `case_id` in natural order (`case_99` before `case_100`), which is the order of
+`deletion_requests.csv`; graders that join on `case_id` are unaffected either way. CSV inputs saved with a UTF-8 byte-order mark (spreadsheet exports) are accepted. Emails and names are matched after Unicode NFKC normalisation and casefolding, and manifest paths that point outside `--dataset-dir` are skipped.
 
 ## How it works
 
