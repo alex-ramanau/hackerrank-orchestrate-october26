@@ -139,6 +139,15 @@ Sample numbers are on all 32 public cases (status accuracy / exact sequence accu
 
 ## 6. Known limitations
 
+- A data flow or backup that evidence links to the person (an identifier, or a data-catalog `LINK_RESOURCE_IDENTITY`
+  activity) but whose state no evidence shows is ignored: only an observed "enabled / restore allowed" makes it a
+  finding. Example from the owner's removal test: without the connector screenshot `evidence_14`, the only trace of
+  `data_flow_1121` before case_39's audit is the catalog link `activity_4002`, so case_39 ends `COMPLETE []` instead of
+  reporting the flow. Treating such a resource as an open path (as the backup rule of #19 does for an archive shown
+  without a restore state) was measured and **not adopted**, by the owner's decision: it changes 0 of the 518
+  evaluation rows and leaves the samples unchanged, but its finding could only cite the catalog link, which proves the
+  flow exists and belongs to the person, not that it runs. A broader variant (any linked flow/backup, timing links
+  included) changed 3 evaluation rows and lowered sample step F1 from 0.974 to 0.966, so labelled data contradicts it.
 - From the external QA fixture (#17), cases that remain open: a system id the evidence never names (`log_archive`
   for a line logged by `notification_service`); a reindex job reported as recreating the very resource it names
   (no separate flow to disable); flow and backup resources that only an activity row mentions, with no identifier
