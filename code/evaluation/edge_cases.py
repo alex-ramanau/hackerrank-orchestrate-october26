@@ -456,8 +456,8 @@ def e15_file_listing_link(ds, k):
     ds.request("case_e15", s.email, w.req, w.rep, w.aud, DELETE_TEXTS[0])
     return [Case("case_e15", "File listed by name only",
                  "A storage-browser screenshot lists a file by name; a data-catalog activity maps that name to object_N.",
-                 "Name-to-resource resolution (known limitation: the cached local-VLM transcription invents ids, "
-                 "so the file-listing pass never runs)", "known-limitation", ("INCOMPLETE", [
+                 "Name-to-resource resolution (the Sonnet file-listing pass, or the OCR fallback when a local VLM's "
+                 "invented ids are dropped by the grounding guard)", "needs-vision", ("INCOMPLETE", [
                      F("object_storage", obj, "REPORT_REMAINING_RECORD", ev),
                      R("object_storage", obj, "DELETE_RECORD"),
                      V("account_service", s.acc, "VERIFY_RECORD_ABSENT"),

@@ -10,9 +10,10 @@ import hashlib
 import json
 import logging
 
-from ..config import PROMPTS_DIR
+from ..config import PROMPTS_DIR, vision_grounding, vision_ocr_fallback
 from ..loaders import parse_ts
 from ..models import EvidenceFile
+from . import ocr
 from .records import RawRecord, system_for
 
 log = logging.getLogger(__name__)
@@ -97,23 +98,39 @@ def file_records(ef: EvidenceFile, payload: dict) -> list[RawRecord]:
     return out
 
 
-def extract(ef: EvidenceFile, llm) -> tuple[list[RawRecord] | None, set]:
-    """None (not []) when the artifact could not be read: its contents are unknown, not empty."""
+def extract(ef: EvidenceFile, llm, known_files=()) -> tuple[list[RawRecord] | None, set, bool]:
+    """(records, coverage, complete). records is None (not []) when the artifact could not be read at all: its
+    contents are unknown, not empty. complete=False means only an OCR fallback read it (findings only)."""
+    payload = None
     if llm is None:
-        log.warning("no LLM adapter: skipping visual evidence %s", ef.file_id)
-        return None, set()
-    result = llm.complete(task="extract_visual", prompt=prompt_for(ef), images=[ef.path], json_schema=SCHEMA)
-    payload = result.parsed_json if result else None
+        log.warning("no LLM adapter for visual evidence %s", ef.file_id)
+    else:
+        result = llm.complete(task="extract_visual", prompt=prompt_for(ef), images=[ef.path], json_schema=SCHEMA)
+        payload = result.parsed_json if result else None
     if not isinstance(payload, dict):
+        text = ocr.ocr_text(ef.path) if vision_ocr_fallback() else None
+        if text and text.strip():
+            records = ocr.fallback_records(ef, text, known_files)
+            log.warning("visual extraction unavailable for %s: %d record(s) from the OCR fallback", ef.file_id, len(records))
+            return records, set(), False
         log.warning("visual extraction unavailable for %s", ef.file_id)
-        return None, set()
+        return None, set(), False
     records = records_from_payload(ef, payload)
+    if vision_grounding():
+        records = ocr.GROUNDING.check(ef, records, ocr.ocr_text(ef.path))
     if not records:
         # no resource ids printed: the artifact may list stored files by name (second, cheaper pass)
         listing = llm.complete(task="extract_files", prompt=files_prompt_for(ef), images=[ef.path], json_schema={"type": "object"})
         if listing and isinstance(listing.parsed_json, dict):
             records = file_records(ef, listing.parsed_json)
-    return records, set()
+            if vision_grounding():
+                records = ocr.GROUNDING.check(ef, records, ocr.ocr_text(ef.path))
+        elif ocr.GROUNDING.files.get(ef.file_id, {}).get("dropped") and vision_ocr_fallback():
+            # everything the model returned was ungrounded and no listing pass is available: read it by OCR
+            records = ocr.fallback_records(ef, ocr.ocr_text(ef.path) or "", known_files)
+            log.warning("%s: vision records ungrounded; %d record(s) from the OCR fallback", ef.file_id, len(records))
+            return records, set(), False
+    return records, set(), True
 
 
 def prefetch(manifest: list[EvidenceFile], llm, workers: int = 4) -> None:

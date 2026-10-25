@@ -23,7 +23,7 @@ Gate failures: 0
 | case_e12 | off-distribution | INCOMPLETE | INCOMPLETE | PASS |  |
 | case_e13 | ambiguous | INCOMPLETE | INCOMPLETE | PASS |  |
 | case_e14 | needs-vision | INCOMPLETE | INCOMPLETE | PASS |  |
-| case_e15 | known-limitation | INCOMPLETE | COMPLETE | FAIL | missing REPORT_REMAINING_RECORD object_8151 @evidence_23; DELETE_RECORD object_8151; VERIFY_RECORD_ABSENT account_8151; VERIFY_RECORD_ABSENT object_8151 / extra VERIFY_RECORD_ABSENT account_8151 @evidence_22 |
+| case_e15 | needs-vision | INCOMPLETE | INCOMPLETE | PASS |  |
 | case_e16 | gate | COMPLETE | COMPLETE | PASS |  |
 | case_e17 | ambiguous | INCOMPLETE | INCOMPLETE | PASS |  |
 | case_e18 | ambiguous | INCOMPLETE | INCOMPLETE | FAIL | missing REPORT_EXPOSED_PII support_8181 @evidence_29; REDACT_RECORD support_8181; VERIFY_RECORD_REDACTED support_8181 / extra REPORT_REMAINING_RECORD support_8181 @evidence_29; DELETE_RECORD support_8181; VERIFY_RECORD_ABSENT support_8181 |

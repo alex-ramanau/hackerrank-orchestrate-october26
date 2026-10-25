@@ -36,7 +36,7 @@ class OpenAIBackend:
             client = openai.OpenAI()
         self.client = client
 
-    def call(self, prompt: str, images: list[Path], model: str, max_tokens: int) -> BackendResponse:
+    def call(self, prompt: str, images: list[Path], model: str, max_tokens: int, json_mode: bool = False) -> BackendResponse:
         resp = self.client.chat.completions.create(
             model=model,
             max_completion_tokens=max_tokens,

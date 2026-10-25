@@ -1,4 +1,4 @@
-"""LLM backends. Each exposes `call(prompt, images, model, max_tokens) -> BackendResponse`."""
+"""LLM backends. Each exposes `call(prompt, images, model, max_tokens, json_mode=False) -> BackendResponse`."""
 from __future__ import annotations
 
 from dataclasses import dataclass

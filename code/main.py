@@ -72,7 +72,7 @@ def main(argv: list[str] | None = None) -> NoReturn:
     unread = sorted(res.context.store.unreadable)
     at_risk = [r.case_id for r in res.results if r.trace.get("unverified_evidence")]
     if unread:
-        print(f"warning: {len(unread)} visual evidence file(s) could not be read ({', '.join(f for f, _ in unread)}); "
+        print(f"warning: {len(unread)} visual evidence file(s) had no vision-model result (unread, or OCR fallback only: {', '.join(f for f, _ in unread)}); "
               f"{len(at_risk)} COMPLETE verdict(s) are unverified against them (see 'unverified_evidence' in traces)",
               file=sys.stderr)
         if at_risk and os.environ.get("GDA_STRICT_EVIDENCE", "1") != "0":

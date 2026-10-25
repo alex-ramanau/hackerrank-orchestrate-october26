@@ -251,6 +251,9 @@ def render_report(sample: dict, intent: dict, scenarios: list[dict], inv: dict |
                 continue
             g.append(f"| {k} | {'pass' if not v else f'**{len(v)} failure(s)**: ' + '; '.join(v[:3])} |")
         g.append(f"| time-travel cases re-run with later evidence physically removed | {inv.get('time_travel_cases_checked', 0)} |")
+        n = inv.get("visual_grounding_records_checked", 0)
+        g.append(f"| vision records checked against local OCR (15 real + 3 edge images; VISION_SPEC step 2) | {n}, "
+                 f"{n - len(inv.get('visual_grounding', []))} grounded |")
     return "# Evaluation report\n\n" + "\n".join(g) + "\n\n" + notes
 
 
