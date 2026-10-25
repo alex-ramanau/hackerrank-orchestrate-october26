@@ -20,7 +20,7 @@ reproducible with no API key.
 | # | Decision | Consequence |
 |---|---|---|
 | D1 | **Hybrid deterministic** architecture | The LLM never chooses steps. It produces typed facts (intent label, extracted records) that the rule engine consumes. |
-| D2 | **Provider-agnostic LLM adapter** + **Claude subscription backend** for local trials/debugging | Backends: `anthropic` (API key), `openai` (API key), `claude_cli` (local `claude -p`, uses the logged-in subscription), `replay` (cache only), `offline` (heuristics). Selected via env `GDA_LLM_BACKEND`. Default for development + final run: `claude_cli` (D6). |
+| D2 | **Provider-agnostic LLM adapter** + **Claude subscription backend** for local trials/debugging | Backends: `anthropic` (API key), `openai` (API key), `claude_cli` (local `claude -p`, uses the logged-in subscription), `ollama` (local/host Ollama server, added in WP-7), `replay` (cache only), `offline` (heuristics). Selected via env `GDA_LLM_BACKEND`. Default for development + final run: `claude_cli` (D6). |
 | D3 | **Content-hash cache + offline fallback** | Cache is committed under `code/cache/`. If the cache misses and no backend is available, a deterministic heuristic is used. `usage_report.md` is generated from a call ledger. |
 | D4 | **One git worktree per work package (WP)** | WPs own disjoint files. Shared contracts are frozen in WP-0 before fan-out. Merges go to `main` behind a sample-regression gate. |
 | D5 | **Deadline: 2026-10-25 13:30 CET = 12:30 UTC** | Five parallel WPs after WP-0. Hard milestones M0–M3 at absolute times (§9). Anything marked *stretch* is cut first. |
@@ -350,7 +350,7 @@ append to the root `log.txt` per AGENTS.md §5 (set `parent_agent=`). Done = acc
 - **Owns:** `llm/`, `intent.py`, `evidence/multimodal.py`, `code/cache/`.
 - **Goal:** the D2/D3 adapter with 5 backends, cache, ledger, prompts, the batched intent classifier,
   and visual extraction for the 11 PNG + 4 PDF files → `Observation`s (evidence_id = the file_id).
-- **Env:** `GDA_LLM_BACKEND` (`claude_cli|anthropic|openai|replay|offline`, default `replay` with
+- **Env:** `GDA_LLM_BACKEND` (`claude_cli|anthropic|openai|ollama|replay|offline`, default `replay` with
   offline fallback), `GDA_MODEL_FAST`, `GDA_MODEL_VISION`, `GDA_BUDGET_USD`, `GDA_BUDGET_SCOPE`,
   `GDA_BUDGET_ON_EXCEED`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`. Never log keys.
 - **Also owns:** `llm/budget.py` and `llm/pricing.py` (§6.1).

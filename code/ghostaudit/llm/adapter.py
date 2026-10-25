@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..config import llm_backend
+from ..config import BACKENDS, llm_backend
 from .backends import BackendUnavailable, get_backend
 from .budget import Budget
 from .cache import LLMCache, cache_key
@@ -71,6 +71,9 @@ class LLMAdapter:
         self.budget = budget or Budget(self.ledger)
         self._backend = backend_impl
         self._backend_error = None
+        if self.backend_name not in BACKENDS:
+            log.warning("unknown GDA_LLM_BACKEND %r (expected one of %s): using the committed cache only",
+                        self.backend_name, ", ".join(BACKENDS))
         if self._backend is None and self.backend_name not in {"replay", "offline"}:
             try:
                 self._backend = get_backend(self.backend_name)

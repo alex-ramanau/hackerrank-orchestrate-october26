@@ -6,7 +6,9 @@ Usage:
     python3 code/main.py --cases sample        # 32 public samples -> ./sample_predictions.csv
     python3 code/main.py --dataset-dir DIR --requests FILE --out PATH --trace-dir DIR
 
-LLM backend: GDA_LLM_BACKEND=replay (default, committed cache) | claude_cli | anthropic | openai | offline.
+LLM backend: GDA_LLM_BACKEND=replay (default, committed cache) | claude_cli | anthropic | openai | ollama | offline.
+Vision checks: GDA_VISION_GROUNDING=1 (default; drop vision records the image's OCR text does not show),
+GDA_VISION_OCR_FALLBACK=1 (default; read a screenshot/PDF by OCR when no vision result exists). See README.md.
 """
 from __future__ import annotations
 
@@ -20,7 +22,7 @@ from typing import NoReturn
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from ghostaudit.config import (  # noqa: E402
-    CACHE_DIR, DEFAULT_DATASET_DIR, EXIT_INPUT_MISSING, EXIT_INVALID_OUTPUT, EXIT_OK, EXIT_UNVERIFIED_EVIDENCE, REPO_ROOT,
+    BACKENDS, CACHE_DIR, DEFAULT_DATASET_DIR, EXIT_INPUT_MISSING, EXIT_INVALID_OUTPUT, EXIT_OK, EXIT_UNVERIFIED_EVIDENCE, REPO_ROOT,
     DatasetPaths,
 )
 from ghostaudit.llm.budget import BudgetExceeded  # noqa: E402
@@ -36,7 +38,7 @@ def main(argv: list[str] | None = None) -> NoReturn:
     ap.add_argument("--requests", type=Path, help="override the request CSV")
     ap.add_argument("--out", type=Path, help="output CSV path")
     ap.add_argument("--trace-dir", type=Path, help="write one <case_id>.json decision trace per case")
-    ap.add_argument("--backend", help="override GDA_LLM_BACKEND")
+    ap.add_argument("--backend", choices=BACKENDS, help="override GDA_LLM_BACKEND")
     ap.add_argument("--workflow-model", type=Path,
                     help=f"frozen workflow model (default for the bundled dataset: {MODEL_PATH.relative_to(REPO_ROOT)})")
     ap.add_argument("--relearn-workflow-model", action="store_true", help="learn the workflow model and save it")
