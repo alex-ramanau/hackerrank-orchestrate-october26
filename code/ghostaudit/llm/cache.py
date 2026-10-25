@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import threading
 from pathlib import Path
 
@@ -24,7 +25,8 @@ def cache_key(task: str, model_alias: str, prompt: str, images: list[Path], vari
 
 class LLMCache:
     def __init__(self, path: Path | None = None):
-        self.path = path or (CACHE_DIR / "llm_cache.jsonl")
+        # GDA_LLM_CACHE: another cache file (e.g. for experiments that must not touch the committed one)
+        self.path = path or Path(os.environ.get("GDA_LLM_CACHE") or CACHE_DIR / "llm_cache.jsonl")
         self._lock = threading.Lock()
         self._data: dict[str, dict] = {}
         if self.path.exists():

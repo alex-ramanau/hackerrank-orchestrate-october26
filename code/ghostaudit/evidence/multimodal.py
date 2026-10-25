@@ -10,7 +10,7 @@ import hashlib
 import json
 import logging
 
-from ..config import PROMPTS_DIR, vision_grounding, vision_ocr_fallback
+from ..config import PROMPTS_DIR, vision_grounding, vision_llm, vision_ocr_fallback
 from ..loaders import parse_ts
 from ..models import EvidenceFile
 from . import ocr
@@ -102,7 +102,9 @@ def extract(ef: EvidenceFile, llm, known_files=()) -> tuple[list[RawRecord] | No
     """(records, coverage, complete). records is None (not []) when the artifact could not be read at all: its
     contents are unknown, not empty. complete=False means only an OCR fallback read it (findings only)."""
     payload = None
-    if llm is None:
+    if not vision_llm():
+        log.info("GDA_VISION=0: vision model not used for %s", ef.file_id)
+    elif llm is None:
         log.warning("no LLM adapter for visual evidence %s", ef.file_id)
     else:
         result = llm.complete(task="extract_visual", prompt=prompt_for(ef), images=[ef.path], json_schema=SCHEMA)
@@ -139,7 +141,7 @@ def prefetch(manifest: list[EvidenceFile], llm, workers: int = 4) -> None:
 
     visual = [ef for ef in sorted(manifest, key=lambda e: e.file_id)
               if ef.path.suffix.lower() in VISUAL_SUFFIXES and ef.path.exists()]
-    if llm is None or not visual:
+    if llm is None or not visual or not vision_llm():
         return
     with ThreadPoolExecutor(max_workers=workers) as pool:
         list(pool.map(lambda ef: llm.complete(task="extract_visual", prompt=prompt_for(ef), images=[ef.path],
