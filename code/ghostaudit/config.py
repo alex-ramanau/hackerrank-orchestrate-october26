@@ -66,6 +66,9 @@ def env(name: str, default: str = "") -> str:
     return os.environ.get(name, default)
 
 
+BACKENDS = ("replay", "claude_cli", "anthropic", "openai", "ollama", "offline")
+
+
 def llm_backend() -> str:
     return env("GDA_LLM_BACKEND", "replay").strip().lower()
 
