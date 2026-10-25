@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
+from ..evidence import ocr
 from ..evidence.records import system_for
 from ..evidence.store import ObservationStore
 from ..identity import IdentityResolver, Subject
@@ -161,7 +162,7 @@ def audit_case(case: Case, ctx: AuditContext) -> CaseResult:
 
     status, steps = build_steps(plans)
     if status == "COMPLETE":
-        _flag_unverified(case, ctx, trace)
+        _flag_unverified(case, ctx, trace, subject, [p.resource_id for p in plans])
     trace["resources"] = [
         {"system_id": p.system_id, "resource_id": p.resource_id, "link": p.link, "category": p.decision.category,
          "treatment": p.decision.treatment, "rule_id": p.decision.rule_id, "state": p.state.kind.value,
@@ -182,12 +183,24 @@ def _system_of(rid: str, observations: list, as_of) -> str:
     return named[0] if named else "unknown"
 
 
-def _flag_unverified(case: Case, ctx: AuditContext, trace: dict) -> None:
+def _flag_unverified(case: Case, ctx: AuditContext, trace: dict, subject: Subject, resource_ids=()) -> None:
     """A COMPLETE verdict is only as good as the evidence that was read: evidence captured during the request
     (requested_at..audit_at) whose contents are unknown (an unreadable screenshot/PDF) could hold a leftover copy.
     The verdict is kept (there is no finding to report) but marked, counted in the run summary, and makes the run
-    exit 4 unless GDA_STRICT_EVIDENCE=0."""
-    unread = sorted(fid for fid, at in ctx.store.unreadable if case.requested_at <= at <= case.audit_at)
+    exit 4 unless GDA_STRICT_EVIDENCE=0.
+
+    When OCR text of such a file exists and shows none of the subject's identifiers and none of their resource
+    ids, the file is about somebody else and is not counted. With no OCR text every request in the window counts."""
+    values = [v for _, v in sorted(subject.identifiers)] + list(resource_ids)
+    unread = []
+    for fid, at in sorted(ctx.store.unreadable):
+        if not case.requested_at <= at <= case.audit_at:
+            continue
+        text = ctx.store.unread_text.get(fid)
+        if text and text.strip() and not ocr.mentions(text, values):
+            trace.setdefault("unread_evidence_about_others", []).append(fid)
+            continue
+        unread.append(fid)
     if unread:
         trace["unverified_evidence"] = unread
 
@@ -204,9 +217,9 @@ def _no_resource(case: Case, ctx: AuditContext, subject: Subject, direct: dict, 
         acc = cands[0][1]
         trace["note"] = f"no observable resource; fell back to workflow {acc.activity_id}"
         steps = [Step("VERIFICATION", "account_service", acc.resource_id, "VERIFY_RECORD_ABSENT", "ABSENT", acc.activity_id)]
-        _flag_unverified(case, ctx, trace)
+        _flag_unverified(case, ctx, trace, subject, [acc.resource_id])
         return CaseResult(case.case_id, "COMPLETE", steps, trace)
     trace["note"] = "no observable resource and no deletion workflow for the subject"
     log.warning("%s: authorized deletion with no observable footprint; COMPLETE without steps", case.case_id)
-    _flag_unverified(case, ctx, trace)
+    _flag_unverified(case, ctx, trace, subject)
     return CaseResult(case.case_id, "COMPLETE", [], trace)
