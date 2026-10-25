@@ -18,7 +18,7 @@ python3 code/main.py                    # 518 requests -> ./output.csv   (~12 s)
 python3 code/main.py --cases sample     # 32 public samples -> ./sample_predictions.csv
 python3 code/evaluation/main.py         # metrics + regenerate both reports (~1.5 min)
 python3 code/evaluation/check_all.py    # quality gate: tests, sample regression, invariants, 11 checks (~40 s)
-python3 -m unittest discover -s code/tests -t code   # 32 unit + 25 end-to-end scenario tests
+python3 -m unittest discover -s code/tests -t code   # 32 unit + 28 end-to-end tests (25 scenarios + 3 unread-evidence)
 python3 code/package.py                 # build code.zip (README.md + code/ + evaluation/ report copies, no dataset)
 ```
 
@@ -38,7 +38,7 @@ so a clean clone reproduces `output.csv` byte-for-byte with no network access an
 
 Other settings: `GDA_MODEL_FAST` (default `claude-haiku-5-5`, intent), `GDA_MODEL_VISION` (default `claude-sonnet-5-5`,
 PNG/PDF evidence), `GDA_VISION` (default `1`; `0` never calls a vision model, so screenshots/PDFs are read by OCR or stay
-unread), `GDA_LLM_CACHE` (another LLM cache file, for experiments that must not touch the committed one),
+unread), `GDA_LLM_CACHE` / `GDA_OCR_CACHE` (other LLM / OCR cache files, for experiments that must not touch the committed ones),
 `GDA_VISION_GROUNDING` (default `1`: drop vision-model records that the image's OCR text does not
 show), `GDA_VISION_OCR_FALLBACK` (default `1`: read a screenshot/PDF by OCR when no vision result exists; such records
 can only report what is still there, never prove absence), `GDA_BUDGET_USD` (default `3.00`, `0` = cache only), `GDA_BUDGET_SCOPE` (`total` | `run`),
@@ -96,7 +96,9 @@ dataset/ ─► loaders ─► IdentityResolver (current + historical email/phon
   Optional tools: `sudo apt install tesseract-ocr tesseract-ocr-rus poppler-utils`.
 - **Unread evidence is never silent.** If a screenshot/PDF cannot be transcribed (empty cache, no vision backend),
   every COMPLETE verdict of a request during which it was captured is marked `unverified_evidence` in its trace,
-  counted on stderr, and the run exits 4 (opt out with `GDA_STRICT_EVIDENCE=0`).
+  counted on stderr, and the run exits 4 (opt out with `GDA_STRICT_EVIDENCE=0`). When the file's OCR text is known
+  and shows none of the person's identifiers or resource ids, it is about somebody else and does not count for that
+  request (`unread_evidence_about_others` in the trace); with no OCR text it counts for every request in the window.
 - **No time travel.** Every observation, activity and cross-case elimination is cut at `audit_at`; the invariant
   suite re-runs cases with later evidence physically deleted and requires identical rows. One narrow exception: a
   retained record (e.g. a security audit event) that appears only in a file *exported* after the audit, inside a

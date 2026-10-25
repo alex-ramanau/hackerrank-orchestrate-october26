@@ -7,7 +7,8 @@ from collections import defaultdict
 from dataclasses import replace
 
 from ..models import Activity, EvidenceFile, Kind
-from . import activity, json_records, logs, multimodal, sql_snapshots, text_records
+from ..config import vision_ocr_fallback
+from . import activity, json_records, logs, multimodal, ocr, sql_snapshots, text_records
 from .records import system_for, to_observation
 from .store import Coverage, ObservationStore
 
@@ -52,6 +53,7 @@ def build_observation_store(manifest: list[EvidenceFile], activities: list[Activ
             if not complete:
                 # unread, or read by OCR only: the file may hold more than was seen, so no COMPLETE rests on it
                 store.unreadable.append((ef.file_id, ef.captured_at))
+                store.unread_text[ef.file_id] = ocr.ocr_text(ef.path) if vision_ocr_fallback() else None
             if records is None:
                 store.report[ef.file_id] = {"path": str(ef.path.name), "error": "visual extraction unavailable"}
                 continue

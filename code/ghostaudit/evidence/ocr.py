@@ -158,6 +158,12 @@ def _found(value: str, hay: str, digits: str) -> bool:
     return _fuzzy_in(v, hay, 1 if len(v) < 12 else 2)  # a misread character or two (S/5, O/0, l/1)
 
 
+def mentions(text: str, values) -> bool:
+    """Does the OCR text show any of these values (emails, phones, hashes, ids), with the same OCR tolerance?"""
+    hay, digits = squash(text), re.sub(r"\D", "", text)
+    return any(_found(str(v), hay, digits) for v in values if v)
+
+
 class Grounding:
     """Counts what the guard checked; read by the evaluation report and the `visual_grounding` invariant."""
 

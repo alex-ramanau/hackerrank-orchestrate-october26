@@ -2,7 +2,8 @@
 
 Finding (2026-10-25, owner's test): an invoice PDF naming only one person, registered in the manifest without a
 vision transcription, flagged every COMPLETE request whose window contained its capture time, people it never
-mentions included, so the run exited 4 for an unrelated request.
+mentions included, so the run exited 4 for an unrelated request. Fixed: with OCR text, a file counts only for the
+requests whose person (identifiers or resource ids) it shows; without OCR text it still counts for all of them.
 """
 from __future__ import annotations
 
@@ -53,13 +54,11 @@ def run(ocr_text: str | None) -> tuple[int, dict]:
 
 
 class UnreadEvidenceScopeTests(unittest.TestCase):
-    @unittest.expectedFailure  # the finding: case_31 is flagged by a file that only names case_30's person
     def test_unread_file_flags_only_the_people_it_names(self):
         code, flags = run("INVOICE\nEmail: LENA.NOVAK@EXAMPLE.ORG​\nInvoice: 100 USD\nPayment Date: 2026-05-07\n")
         self.assertEqual(flags, {"case_30": ["evidence_02"], "case_31": None})
         self.assertEqual(code, 4)
 
-    @unittest.expectedFailure
     def test_unread_file_naming_nobody_flags_nobody(self):
         code, flags = run("INVOICE\nEmail: someone.else@example.com\nInvoice: 100 USD\n")
         self.assertEqual(flags, {"case_30": None, "case_31": None})
