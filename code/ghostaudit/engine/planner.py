@@ -38,6 +38,8 @@ def build_steps(plans: list[ResourcePlan]) -> tuple[str, list[Step]]:
     steps: list[Step] = []
     if not incomplete:
         for p in plans:
+            if not p.state.evidence_id:
+                continue  # a COMPLETE case verifies only what evidence proves; an unproven state is not a check
             verify = TREATMENTS[p.decision.treatment][3]
             steps.append(Step("VERIFICATION", p.system_id, p.resource_id, verify,
                               _state(verify), p.state.evidence_id))
