@@ -137,6 +137,12 @@ def load_activity(path: Path) -> list[Activity]:
     return out
 
 
+def natural_case_key(case_id: str) -> tuple:
+    """Natural order: digit runs compare as numbers (case_99 < case_100, case_e01a right after case_e01). On the
+    dataset this is exactly the order of deletion_requests.csv."""
+    return tuple((0, int(t), "") if t.isdigit() else (1, 0, t) for t in re.findall(r"\d+|\D+", case_id)) + ((-1, 0, case_id),)
+
+
 def case_sort_key(case_id: str):
     m = re.search(r"(\d+)$", case_id)
     return (case_id.rstrip("0123456789"), int(m.group(1)) if m else -1, case_id)

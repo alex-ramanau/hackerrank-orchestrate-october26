@@ -95,6 +95,12 @@ class LoaderTests(unittest.TestCase):
         self.assertEqual(sorted(f for f, _ in st.unreadable), sorted(e.file_id for e in man))
         self.assertEqual(st.observations, [])
 
+    def test_output_rows_follow_the_request_file_order(self):
+        ids = [c.case_id for c in loaders.load_cases(D / "deletion_requests.csv")]
+        self.assertEqual(sorted(ids, key=loaders.natural_case_key), ids)
+        self.assertEqual(sorted(["case_e02", "case_100", "case_e01a", "case_99", "case_e01"], key=loaders.natural_case_key),
+                         ["case_99", "case_100", "case_e01", "case_e01a", "case_e02"])
+
     def test_unicode_equivalent_emails_normalize_alike(self):
         composed, decomposed = "josé.alvarez@example.test", "josé.alvarez@example.test"
         self.assertEqual(loaders.normalize_email(composed), loaders.normalize_email(decomposed.upper()))
