@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -38,12 +39,13 @@ PHONE_FIELDS = ("phone", "requester_phone", "owner_phone")
 class OCRCache:
     """Append-only JSONL: one line per file content hash."""
 
-    def __init__(self, path: Path = CACHE_PATH):
-        self.path = path
+    def __init__(self, path: Path | None = None):
+        # GDA_OCR_CACHE: another OCR cache file (experiments and tests must not touch the committed one)
+        self.path = path or Path(os.environ.get("GDA_OCR_CACHE") or CACHE_PATH)
         self._lock = threading.Lock()
         self._entries: dict[str, dict] = {}
-        if path.exists():
-            for line in path.read_text(encoding="utf-8").splitlines():
+        if self.path.exists():
+            for line in self.path.read_text(encoding="utf-8").splitlines():
                 if line.strip():
                     e = json.loads(line)
                     self._entries.setdefault(e["sha256"], e)
