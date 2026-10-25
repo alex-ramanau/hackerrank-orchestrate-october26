@@ -18,7 +18,7 @@ python3 code/main.py                    # 518 requests -> ./output.csv   (~12 s)
 python3 code/main.py --cases sample     # 32 public samples -> ./sample_predictions.csv
 python3 code/evaluation/main.py         # metrics + regenerate both reports (~1.5 min)
 python3 code/evaluation/check_all.py    # quality gate: tests, sample regression, invariants, 11 checks (~40 s)
-python3 -m unittest discover -s code/tests -t code   # 32 unit + 30 end-to-end tests (25 scenarios + 5 unread/missing evidence)
+python3 -m unittest discover -s code/tests -t code   # 32 unit + 31 end-to-end tests (25 scenarios + 6 evidence-safety tests)
 python3 code/package.py                 # build code.zip (README.md + code/ + evaluation/ report copies, no dataset)
 ```
 

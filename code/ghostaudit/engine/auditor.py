@@ -133,7 +133,9 @@ def audit_case(case: Case, ctx: AuditContext) -> CaseResult:
             if account_id and rid != account_id and state.kind != Kind.PRESENT:
                 continue
             if state.kind is None:
-                state = ResourceState(Kind.ABSENT, workflow.activity_id if workflow and rid == account_id else "")
+                # nothing observed it: the deletion is only the workflow's claim, so the absence is unproven (an
+                # uncited post-remediation check in an INCOMPLETE case, never cited proof of a COMPLETE one)
+                state = ResourceState(Kind.ABSENT, "")
         if state.kind is None:
             continue
         last = _last_seen(observations, case.audit_at)
@@ -208,18 +210,15 @@ def _flag_unverified(case: Case, ctx: AuditContext, trace: dict, subject: Subjec
 def _no_resource(case: Case, ctx: AuditContext, subject: Subject, direct: dict, trace: dict) -> CaseResult:
     """Defined behaviour when no resource of the subject is observable at audit_at.
 
-    The best-scoring profile deletion in the request window (even if another request also claims it) is the
-    only footprint left: its account is verified ABSENT citing that deletion event. With no workflow at all the
-    deletion was still authorized and nothing remains according to the evidence, so the case is COMPLETE with no
-    steps (there is no proof to cite). NOT_APPLICABLE is reserved for requests that do not authorize deletion."""
+    The deletion was authorized and the evidence shows nothing remaining, so the case is COMPLETE with no steps:
+    there is no proof to cite. A profile deletion in the request window is only the workflow's claim (it may even
+    report FAILED, or belong to another request), so it is recorded in the trace but never cited as proof of
+    absence. NOT_APPLICABLE is reserved for requests that do not authorize deletion."""
     cands = ctx.linker.workflow_candidates(case, subject, direct, ctx.linker.lead_range, case.audit_at)
     if cands:
         acc = cands[0][1]
-        trace["note"] = f"no observable resource; fell back to workflow {acc.activity_id}"
-        steps = [Step("VERIFICATION", "account_service", acc.resource_id, "VERIFY_RECORD_ABSENT", "ABSENT", acc.activity_id)]
-        _flag_unverified(case, ctx, trace, subject, [acc.resource_id])
-        return CaseResult(case.case_id, "COMPLETE", steps, trace)
-    trace["note"] = "no observable resource and no deletion workflow for the subject"
+        trace["unproven_workflow"] = f"{acc.activity_id} {acc.resource_id} {acc.reported_result} (a claim, not cited)"
+    trace["note"] = "no observable resource of the subject"
     log.warning("%s: authorized deletion with no observable footprint; COMPLETE without steps", case.case_id)
     _flag_unverified(case, ctx, trace, subject)
     return CaseResult(case.case_id, "COMPLETE", [], trace)

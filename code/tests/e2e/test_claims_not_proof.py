@@ -3,6 +3,7 @@
 Finding (2026-10-25, owner's removal test): with no observable record of the person, the no-footprint fallback
 verified `account_8819` ABSENT citing `activity_3114`, a `DELETE_RECORD ... FAILED` event. Verification steps of
 a COMPLETE case must cite evidence that establishes the state; no sample ever cites an activity for it.
+Fixed: with nothing observable the case is COMPLETE without steps; the workflow is only noted in the trace.
 """
 from __future__ import annotations
 
@@ -28,7 +29,6 @@ def deletion_claims_only():
 
 
 class ClaimsAreNotProofTests(unittest.TestCase):
-    @unittest.expectedFailure  # the finding: the fallback cites the workflow event as proof
     def test_deletion_claim_is_never_cited_as_proof_of_absence(self):
         with tempfile.TemporaryDirectory(prefix="gda_claims_") as tmp:
             _, got, log = run_scenario(deletion_claims_only, Path(tmp))
