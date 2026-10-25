@@ -18,7 +18,7 @@ python3 code/main.py                    # 518 requests -> ./output.csv   (~12 s)
 python3 code/main.py --cases sample     # 32 public samples -> ./sample_predictions.csv
 python3 code/evaluation/main.py         # metrics + regenerate both reports (~1.5 min)
 python3 code/evaluation/check_all.py    # quality gate: tests, sample regression, invariants, 11 checks (~40 s)
-python3 -m unittest discover -s code/tests -t code   # 32 unit + 24 end-to-end scenario tests
+python3 -m unittest discover -s code/tests -t code   # 32 unit + 25 end-to-end scenario tests
 python3 code/package.py                 # build code.zip (README.md + code/ + evaluation/ report copies, no dataset)
 ```
 
@@ -110,7 +110,7 @@ dataset/ ─► loaders ─► IdentityResolver (current + historical email/phon
 | Sample status accuracy (dev / holdout) | 100% / 100% |
 | Sample step F1 · exact sequence | 97.4% · 84.4% (holdout 100%); the rest are 2 audit records absent from every file and 3 hand-written accounts |
 | Intent: own 62-text multilingual set + 32 samples (LLM) | 100% accuracy, NON_DELETE recall 100% |
-| Custom end-to-end scenarios | 24 / 24 |
+| Custom end-to-end scenarios | 25 / 25 |
 | Vision records grounded by local OCR (15 real + 3 edge images) | 38 / 38 |
 | Invariants on the 518-case run | contract, citations ≤ audit_at, policy sanity, determinism, identifier invariance, time travel, visual grounding: all pass |
 | LLM cost to build the cache used by the final run | ≈ $1.37 (34 calls via `claude -p`; ≈ $0.20 estimated via the direct API), $0 marginal for replay runs |

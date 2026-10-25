@@ -276,6 +276,10 @@ def classify_state(resource_id: str, system: str, f: dict, direct: set) -> Kind 
             return Kind.RESTORE_ALLOWED
         if ra is False:
             return Kind.RESTORE_BLOCKED
+        if result in {"FOUND", "PRESENT", "HIT"} or (rows or 0) > 0 or status_code == 200:
+            # the archive is shown to exist and nothing shows its restore blocked: an unproven block is a restore
+            # path ("COMPLETE only when no restore path can recreate the data")
+            return Kind.RESTORE_ALLOWED
         return None
 
     if system in {"security_service", "legal_service"}:

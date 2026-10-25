@@ -478,6 +478,24 @@ def other_recreation_and_check_wordings():
     ])}
 
 
+def archive_without_visible_block_is_a_restore_risk():
+    """A subject's archive that evidence shows to exist, with no restore state shown, is a restore path until a
+    block is proven; another person's archive on the same screen is not the subject's risk."""
+    ds = base().user("user_150", "Miller Logistics", "miller.logistics@example.com", "+1 555 0100 150")
+    profile_deletion(ds, "account_7001")
+    ds.bundle_json("2026-05-09T09:00:00Z", [("backup_service", "archive_catalog", [
+        {"resource_id": "backup_7060", "account": EMAIL, "customer_email": EMAIL, "result": "FOUND",
+         "retention_until": "2026-08-01T00:00:00Z"},
+        {"resource_id": "backup_7061", "customer_email": "miller.logistics@example.com", "result": "FOUND"}])])
+    ds.request("case_29", EMAIL, REQ, REP, AUD)
+    return ds, {"case_29": ("INCOMPLETE", [
+        F("backup_service", "backup_7060", "REPORT_RESTORE_RISK", "evidence_01"),
+        R("backup_service", "backup_7060", "BLOCK_RESTORE"),
+        V("account_service", "account_7001", "VERIFY_RECORD_ABSENT"),
+        V("backup_service", "backup_7060", "VERIFY_RESTORE_BLOCKED"),
+    ])}
+
+
 SCENARIOS = [
     historical_email_only, near_miss_decoys, evidence_after_audit_is_ignored, korean_non_deletion_request,
     success_claim_is_not_proof, failover_replica_drift, connector_recreates_deleted_entry, restorable_backup,
@@ -486,5 +504,5 @@ SCENARIOS = [
     unknown_identity_uses_bare_email, retained_record_from_late_export, late_export_never_supports_complete,
     unknown_email_gets_no_timing_link, earlier_request_owns_its_leftovers,
     recent_leftover_of_earlier_request_is_reported, tombstone_status_on_profile_rows, unlisted_resource_prefixes,
-    cyrillic_deletion_request, other_recreation_and_check_wordings,
+    cyrillic_deletion_request, other_recreation_and_check_wordings, archive_without_visible_block_is_a_restore_risk,
 ]
