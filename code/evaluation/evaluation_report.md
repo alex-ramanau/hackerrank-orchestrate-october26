@@ -63,7 +63,7 @@ Evaluation texts: 375 unique, 375 labelled by the LLM; LLM/heuristic agreement *
 
 ## 3. Custom end-to-end evaluation cases
 
-24/24 hand-labelled scenarios pass. Each writes a miniature dataset in the real file formats, runs `main.py` as a subprocess and compares every output step (code: `code/tests/e2e/`).
+25/25 hand-labelled scenarios pass. Each writes a miniature dataset in the real file formats, runs `main.py` as a subprocess and compares every output step (code: `code/tests/e2e/`).
 
 | # | Scenario | Expected | Result |
 |---|---|---|---|
@@ -91,6 +91,7 @@ Evaluation texts: 375 unique, 375 labelled by the LLM; LLM/heuristic agreement *
 | 22 | `unlisted_resource_prefixes` | case_26: INCOMPLETE | pass |
 | 23 | `cyrillic_deletion_request` | case_27: INCOMPLETE | pass |
 | 24 | `other_recreation_and_check_wordings` | case_28: INCOMPLETE | pass |
+| 25 | `archive_without_visible_block_is_a_restore_risk` | case_29: INCOMPLETE | pass |
 
 ## 4. Invariants on the 518-case run (no labels needed)
 
@@ -131,6 +132,7 @@ Sample numbers are on all 32 public cases (status accuracy / exact sequence accu
 | 16 | Second independent review | Without the LLM cache the default run still exited 0 with 7 cases flipped to COMPLETE, and the unverified flag marked every COMPLETE row. | A flag now marks only COMPLETE cases during whose request (`requested_at`..`audit_at`) an unreadable file was captured; this catches all 8 offline flips. The run exits 4 by default after writing every row; `GDA_STRICT_EVIDENCE=0` accepts the verdicts. | offline: 120 instead of 158 flagged rows, 8/8 flips caught; replay unaffected |
 | 17 | External QA judge (own 28-case fixture, no LLM) | Status 0.643, step F1 0.476 on a fixture with the same contract but other spellings. Five causes: (a) resource ids outside the known prefixes (`cust_`, `log_`) were dropped; (b) `account_*` rows with `account_status='TOMBSTONE'` were deleted instead of redacted; (c) user ids outside the `user_<n>` scheme (`u_2008`) did not link; (d) the offline intent fallback missed Russian (and some Spanish/English) erasure requests; (e) other activity wordings ("Reindex job recreated …", "check confirmed X can restore …") and a bracket log layout without a trace id were not read. Also: no Unicode normalisation of emails, manifest paths not confined to the dataset. | System from the evidence's own `origin_system` / log service for unknown prefixes, category from the collection / event name; TOMBSTONE status → `ACCOUNT_TOMBSTONE`; reference fields link any id-shaped value; deletion verbs for ru/uk/pl/it/nl/tr/zh/ar/hi and the Spanish/English gaps; broader recreation/check patterns; NFKC + casefold; paths resolved under the dataset root. Expected steps re-derived from the judge's quoted evidence only (never its answers). | 6 of the judge's failing cases rebuilt from its quotes now match its expected steps exactly; offline intent 56/62 → 62/62 and now agrees with the LLM on all 518 eval texts; real `output.csv` byte-identical; e2e `tombstone_status_on_profile_rows`, `unlisted_resource_prefixes`, `cyrillic_deletion_request`, `other_recreation_and_check_wordings` |
 | 18 | Vision review (VISION_SPEC) | Nothing checked that a vision transcription is faithful (a local VLM invented `export_001/002` for e15), and with no vision result a screenshot/PDF was skipped entirely. | OCR grounding guard (Tesseract / `pdftotext`, cached by sha256): ungrounded ids are dropped, ungrounded emails/phones removed; OCR-only fallback that can report findings but never prove absence. Both switchable, on by default. e15 transcribed by Sonnet ($0.147). | 38/38 vision records grounded (34 real + 4 edge); e15 passes (relabelled from known-limitation); offline flips 8 → 5; `output.csv` byte-identical; invariant `visual_grounding` |
+| 19 | Cross-model run (Kimi K3 via Ollama cloud, all 34 calls live) | 517/518 rows identical; case_55 flipped because Kimi read the subject's archive `backup_9287` on the backup console as `ACTIVE` where Sonnet read `FOUND`. The screenshot shows the archive (linked to the subject by a data-catalog activity before `audit_at`) but no restore state; the code ignored an archive whose restore state was not shown, so the verdict depended on one transcribed word. | A subject's archive that evidence shows to exist, with nothing showing its restore blocked, is a restore path (the contract: COMPLETE only when no restore path can recreate the data). | case_55 COMPLETE → INCOMPLETE (now the same under both models); 0 other eval rows; samples unchanged; e2e `archive_without_visible_block_is_a_restore_risk` |
 
 ## 6. Known limitations
 
