@@ -37,7 +37,9 @@ so a clean clone reproduces `output.csv` byte-for-byte with no network access an
 | `ollama` | Local (or `:cloud`) models through the Ollama HTTP API, $0 for local models. Defaults: `qwen3:8b` for intent, `qwen2.5vl:7b` for vision (override with `GDA_MODEL_FAST` / `GDA_MODEL_VISION`). JSON mode, thinking off, temperature 0, seed 7. PDFs are sent as page images rendered by `pdftoppm`. Results are cached under their own `ollama:<model>` key; in replay the Sonnet entries win | Ollama server (`OLLAMA_HOST`, default `http://127.0.0.1:11434`) with the models pulled; `poppler-utils` for PDFs |
 
 Other settings: `GDA_MODEL_FAST` (default `claude-haiku-5-5`, intent), `GDA_MODEL_VISION` (default `claude-sonnet-5-5`,
-PNG/PDF evidence), `GDA_VISION_GROUNDING` (default `1`: drop vision-model records that the image's OCR text does not
+PNG/PDF evidence), `GDA_VISION` (default `1`; `0` never calls a vision model, so screenshots/PDFs are read by OCR or stay
+unread), `GDA_LLM_CACHE` (another LLM cache file, for experiments that must not touch the committed one),
+`GDA_VISION_GROUNDING` (default `1`: drop vision-model records that the image's OCR text does not
 show), `GDA_VISION_OCR_FALLBACK` (default `1`: read a screenshot/PDF by OCR when no vision result exists; such records
 can only report what is still there, never prove absence), `GDA_BUDGET_USD` (default `3.00`, `0` = cache only), `GDA_BUDGET_SCOPE` (`total` | `run`),
 `GDA_BUDGET_ON_EXCEED` (`fallback` | `abort`, exit code 3), `GDA_STRICT_EVIDENCE` (default `1`: exit code 4, after writing every row, when a

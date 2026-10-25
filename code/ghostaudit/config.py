@@ -85,6 +85,11 @@ def _flag(name: str, default: bool) -> bool:
     return v not in {"0", "false", "no", "off", ""}
 
 
+def vision_llm() -> bool:
+    """GDA_VISION (default on): read screenshots/PDFs with the vision model (cache or live). 0 = never call it."""
+    return _flag("GDA_VISION", True)
+
+
 def vision_grounding() -> bool:
     """GDA_VISION_GROUNDING (default on): drop vision-model records that the OCR text of the image does not show."""
     return _flag("GDA_VISION_GROUNDING", True)

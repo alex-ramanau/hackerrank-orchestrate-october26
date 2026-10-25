@@ -7,7 +7,7 @@ Usage:
     python3 code/main.py --dataset-dir DIR --requests FILE --out PATH --trace-dir DIR
 
 LLM backend: GDA_LLM_BACKEND=replay (default, committed cache) | claude_cli | anthropic | openai | ollama | offline.
-Vision checks: GDA_VISION_GROUNDING=1 (default; drop vision records the image's OCR text does not show),
+Vision: GDA_VISION=1 (default; 0 = no vision model), GDA_VISION_GROUNDING=1 (default; drop vision records the image's OCR text does not show),
 GDA_VISION_OCR_FALLBACK=1 (default; read a screenshot/PDF by OCR when no vision result exists). See README.md.
 """
 from __future__ import annotations
